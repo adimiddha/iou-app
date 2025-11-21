@@ -116,6 +116,26 @@ export default function FriendRequests() {
         return;
       }
 
+      const { data: existingFriendship } = await supabase
+        .from('friendships')
+        .select('*')
+        .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${targetUser.id}),and(requester_id.eq.${targetUser.id},addressee_id.eq.${currentUser.id})`)
+        .maybeSingle();
+
+      if (existingFriendship) {
+        if (existingFriendship.status === 'accepted') {
+          showMessage('error', 'You are already friends with this user');
+        } else if (existingFriendship.status === 'pending') {
+          if (existingFriendship.requester_id === currentUser.id) {
+            showMessage('error', 'Friend request already sent');
+          } else {
+            showMessage('error', 'This user has already sent you a friend request. Check your pending requests!');
+          }
+        }
+        setLoading(false);
+        return;
+      }
+
       const { error } = await supabase
         .from('friendships')
         .insert([{
@@ -131,6 +151,7 @@ export default function FriendRequests() {
           showMessage('error', 'Failed to send friend request');
         }
       } else {
+        await loadFriendships();
         showMessage('success', 'Friend request sent!');
         setSearchUsername('');
       }

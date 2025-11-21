@@ -10,10 +10,18 @@ type IOUWithProfiles = IOU & {
 type IOUSummary = {
   userId: string;
   username: string;
-  netAmount: number;
+  balances: Record<IOUType, number>;
 };
 
 const IOU_TYPES: IOUType[] = ['Coffee', 'Beer', 'Meal', 'Walk', 'Ride'];
+
+const IOU_EMOJIS: Record<IOUType, string> = {
+  Coffee: '☕',
+  Beer: '🍺',
+  Meal: '🍽️',
+  Walk: '🚶',
+  Ride: '🚗'
+};
 
 export default function IOUDashboard() {
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
@@ -171,22 +179,24 @@ export default function IOUDashboard() {
         const existing = summaryMap.get(iou.to_user_id) || {
           userId: iou.to_user_id,
           username: iou.to_profile.username,
-          netAmount: 0,
+          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0 },
         };
-        existing.netAmount -= iou.amount;
+        existing.balances[iou.description] = (existing.balances[iou.description] || 0) - iou.amount;
         summaryMap.set(iou.to_user_id, existing);
       } else if (iou.to_user_id === currentUser.id) {
         const existing = summaryMap.get(iou.from_user_id) || {
           userId: iou.from_user_id,
           username: iou.from_profile.username,
-          netAmount: 0,
+          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0 },
         };
-        existing.netAmount += iou.amount;
+        existing.balances[iou.description] = (existing.balances[iou.description] || 0) + iou.amount;
         summaryMap.set(iou.from_user_id, existing);
       }
     });
 
-    return Array.from(summaryMap.values()).filter((s) => s.netAmount !== 0);
+    return Array.from(summaryMap.values()).filter((s) =>
+      Object.values(s.balances).some(amount => amount !== 0)
+    );
   };
 
   const summary = calculateSummary();
@@ -227,23 +237,30 @@ export default function IOUDashboard() {
                 {summary.length === 0 ? (
                   <p className="text-gray-500 text-sm">No IOUs yet</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {summary.map((s) => (
-                      <div
-                        key={s.userId}
-                        className="flex justify-between items-center bg-white rounded-lg p-3 shadow-sm"
-                      >
-                        <span className="font-medium text-gray-700">{s.username}</span>
-                        <span
-                          className={`font-bold text-lg ${
-                            s.netAmount > 0
-                              ? 'text-green-600'
-                              : 'text-red-600'
-                          }`}
-                        >
-                          {s.netAmount > 0 ? '+' : ''}
-                          {s.netAmount}
-                        </span>
+                      <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm">
+                        <div className="font-semibold text-gray-800 mb-2">{s.username}</div>
+                        <div className="space-y-1">
+                          {(Object.entries(s.balances) as [IOUType, number][])
+                            .filter(([_, amount]) => amount !== 0)
+                            .map(([type, amount]) => (
+                              <div key={type} className="flex justify-between items-center">
+                                <span className="text-gray-600 flex items-center gap-1">
+                                  <span className="text-xl">{IOU_EMOJIS[type]}</span>
+                                  <span className="text-sm">{type}</span>
+                                </span>
+                                <span
+                                  className={`font-bold ${
+                                    amount > 0 ? 'text-green-600' : 'text-red-600'
+                                  }`}
+                                >
+                                  {amount > 0 ? '+' : ''}
+                                  {amount}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -365,8 +382,9 @@ export default function IOUDashboard() {
                                 </>
                               )}
                             </p>
-                            <p className="text-sm text-gray-600">
-                              {iou.amount} × {iou.description}
+                            <p className="text-sm text-gray-600 flex items-center gap-1">
+                              <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
+                              <span>{iou.amount} × {iou.description}</span>
                             </p>
                           </div>
 
