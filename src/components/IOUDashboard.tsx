@@ -809,72 +809,72 @@ export default function IOUDashboard() {
                               return (
                                 <div
                                   key={type}
-                                  className={`flex justify-between items-center p-2 rounded-lg border-l-4 ${
+                                  className={`rounded-lg border-l-4 ${
                                     isOwed ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-2 flex-1">
-                                    <span className="text-2xl">{IOU_EMOJIS[type]}</span>
-                                    <div className="flex flex-col">
-                                      <span className="text-xs text-gray-600 font-medium">{type}</span>
-                                      <span className="text-xs text-gray-500">
-                                        {isOwed ? 'They owe you' : 'You owe them'}
-                                      </span>
+                                  <div className="flex justify-between items-center p-2">
+                                    <div className="flex items-center gap-2 flex-1">
+                                      <span className="text-2xl">{IOU_EMOJIS[type]}</span>
+                                      <div className="flex flex-col">
+                                        <span className="text-xs text-gray-600 font-medium">{type}</span>
+                                        <span className="text-xs text-gray-500">
+                                          {isOwed ? 'They owe you' : 'You owe them'}
+                                        </span>
+                                      </div>
                                     </div>
-                                  </div>
-                                  <div className="flex items-center gap-2 justify-end">
-                                    <span className="font-bold text-lg text-gray-800 w-16 text-center">
+                                    <span className="font-bold text-lg text-gray-800">
                                       {isOwed ? amount : -Math.abs(amount)}
                                     </span>
+                                  </div>
+                                  <div className="border-t border-gray-200 px-2 py-1.5 flex gap-2 justify-end bg-white bg-opacity-50">
                                     {isOwed ? (
                                       <>
-                                        <div className="w-10 flex justify-center">
-                                          <button
-                                            onClick={() => {
-                                              setGenerousDecreaseModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
-                                              setGenerousDecreaseAmount(Math.min(1, Math.abs(amount)));
-                                            }}
-                                            className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition-colors"
-                                            title="Forgive debt (instant)"
-                                          >
-                                            <Minus className="w-4 h-4" />
-                                          </button>
-                                        </div>
-                                        <div className="w-24 flex justify-end">
-                                          <button
-                                            onClick={() => {
-                                              setSelfishIncreaseModal({ friendId: s.userId, type });
-                                            }}
-                                            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-xs font-medium transition-colors"
-                                          >
-                                            Add More
-                                          </button>
-                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            setGenerousDecreaseModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
+                                            setGenerousDecreaseAmount(Math.min(1, Math.abs(amount)));
+                                          }}
+                                          className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          title="Instant - no approval needed"
+                                        >
+                                          <Minus className="w-3 h-3" />
+                                          Forgive
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setSelfishIncreaseModal({ friendId: s.userId, type });
+                                          }}
+                                          className="flex items-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          title="Sends request for approval"
+                                        >
+                                          <Plus className="w-3 h-3" />
+                                          Add More
+                                        </button>
                                       </>
                                     ) : (
                                       <>
-                                        <div className="w-24 flex justify-end">
-                                          <button
-                                            onClick={() => {
-                                              setSettleUpModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
-                                              setSettleUpAmount(Math.min(1, Math.abs(amount)));
-                                            }}
-                                            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-xs font-medium transition-colors"
-                                          >
-                                            Settle Up
-                                          </button>
-                                        </div>
-                                        <div className="w-10 flex justify-center">
-                                          <button
-                                            onClick={() => {
-                                              setGenerousIncreaseModal({ friendId: s.userId, type });
-                                            }}
-                                            className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg transition-colors"
-                                            title="Add to what you owe (instant)"
-                                          >
-                                            <Plus className="w-4 h-4" />
-                                          </button>
-                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            setSettleUpModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
+                                            setSettleUpAmount(Math.min(1, Math.abs(amount)));
+                                          }}
+                                          className="flex items-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          title="Sends request for approval"
+                                        >
+                                          <Check className="w-3 h-3" />
+                                          Settle Up
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            setGenerousIncreaseModal({ friendId: s.userId, type });
+                                          }}
+                                          className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          title="Instant - no approval needed"
+                                        >
+                                          <Plus className="w-3 h-3" />
+                                          Add
+                                        </button>
                                       </>
                                     )}
                                   </div>
@@ -971,7 +971,7 @@ export default function IOUDashboard() {
           {generousDecreaseModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Forgive Debt</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Forgive {generousDecreaseModal.type}</h3>
                 <p className="text-sm text-gray-600 mb-4">This will instantly reduce what they owe you. No approval needed.</p>
                 <div className="space-y-4">
                   <div>
@@ -1071,7 +1071,7 @@ export default function IOUDashboard() {
           {generousIncreaseModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Add to What You Owe</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Add to My IOU</h3>
                 <p className="text-sm text-gray-600 mb-4">This will instantly add 1 {generousIncreaseModal.type} to what you owe them. No approval needed.</p>
                 <div className="space-y-4">
                   <div>
@@ -1158,7 +1158,7 @@ export default function IOUDashboard() {
                       onClick={handleSettleUp}
                       className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
                     >
-                      Request Confirmation
+                      Send Request
                     </button>
                   </div>
                 </div>
