@@ -13,12 +13,17 @@ export type Profile = {
 
 export type IOUType = 'Coffee' | 'Beer' | 'Meal' | 'Walk' | 'Ride' | 'Pizza';
 
+export type IOUStatus = 'confirmed' | 'pending_decrease' | 'disputed';
+
 export type IOU = {
   id: string;
   from_user_id: string;
   to_user_id: string;
   description: IOUType;
   amount: number;
+  status: IOUStatus;
+  optional_note?: string;
+  requester_user_id?: string;
   created_at: string;
   updated_at: string;
 };

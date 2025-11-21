@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { supabase, type IOU, type Profile, type IOUType, type Friendship } from '../lib/supabase';
-import { Beer, Plus, Minus, LogOut, Users } from 'lucide-react';
+import { supabase, type IOU, type Profile, type IOUType, type IOUStatus, type Friendship } from '../lib/supabase';
+import { Beer, Plus, Minus, LogOut, Users, Check, Clock, AlertCircle, X } from 'lucide-react';
 
 type IOUWithProfiles = IOU & {
   from_profile: Profile;
@@ -11,6 +11,7 @@ type IOUSummary = {
   userId: string;
   username: string;
   balances: Record<IOUType, number>;
+  overallStatus: 'confirmed' | 'pending' | 'disputed';
 };
 
 const IOU_TYPES: IOUType[] = ['Coffee', 'Beer', 'Meal', 'Walk', 'Ride', 'Pizza'];
@@ -33,6 +34,10 @@ export default function IOUDashboard() {
   const [amount, setAmount] = useState(1);
   const [direction, setDirection] = useState<'owe' | 'owed'>('owe');
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'settled'>('all');
+  const [markAsPaidModal, setMarkAsPaidModal] = useState<{ friendId: string; type: IOUType; maxAmount: number } | null>(null);
+  const [markAsPaidAmount, setMarkAsPaidAmount] = useState(1);
+  const [markAsPaidNote, setMarkAsPaidNote] = useState('');
 
   useEffect(() => {
     loadUserData();
@@ -197,6 +202,73 @@ export default function IOUDashboard() {
     await loadIOUs();
   };
 
+  const handleMarkAsPaid = async () => {
+    if (!currentUser || !markAsPaidModal) return;
+
+    const { friendId, type } = markAsPaidModal;
+
+    const iouData = {
+      from_user_id: currentUser.id,
+      to_user_id: friendId,
+      description: type,
+      amount: markAsPaidAmount,
+      status: 'pending_decrease' as IOUStatus,
+      optional_note: markAsPaidNote || null,
+      requester_user_id: currentUser.id
+    };
+
+    const { error } = await supabase.from('ious').insert([iouData]);
+
+    if (error) {
+      console.error('Error creating pending decrease:', error);
+      alert('Failed to mark as paid');
+    } else {
+      await loadIOUs();
+      setMarkAsPaidModal(null);
+      setMarkAsPaidAmount(1);
+      setMarkAsPaidNote('');
+    }
+  };
+
+  const handleApprovePending = async (iouId: string) => {
+    const { error } = await supabase
+      .from('ious')
+      .update({ status: 'confirmed' })
+      .eq('id', iouId);
+
+    if (error) {
+      console.error('Error approving pending:', error);
+    } else {
+      await loadIOUs();
+    }
+  };
+
+  const handleDeclinePending = async (iouId: string) => {
+    const { error } = await supabase
+      .from('ious')
+      .update({ status: 'disputed' })
+      .eq('id', iouId);
+
+    if (error) {
+      console.error('Error declining pending:', error);
+    } else {
+      await loadIOUs();
+    }
+  };
+
+  const handleCancelPending = async (iouId: string) => {
+    const { error } = await supabase
+      .from('ious')
+      .delete()
+      .eq('id', iouId);
+
+    if (error) {
+      console.error('Error canceling pending:', error);
+    } else {
+      await loadIOUs();
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.reload();
@@ -206,33 +278,68 @@ export default function IOUDashboard() {
     if (!currentUser) return [];
 
     const summaryMap = new Map<string, IOUSummary>();
+    const statusMap = new Map<string, Set<IOUStatus>>();
 
     ious.forEach((iou) => {
-      if (iou.from_user_id === currentUser.id) {
-        const existing = summaryMap.get(iou.to_user_id) || {
-          userId: iou.to_user_id,
-          username: iou.to_profile.username,
-          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
-        };
-        existing.balances[iou.description] = (existing.balances[iou.description] || 0) - iou.amount;
-        summaryMap.set(iou.to_user_id, existing);
-      } else if (iou.to_user_id === currentUser.id) {
-        const existing = summaryMap.get(iou.from_user_id) || {
-          userId: iou.from_user_id,
-          username: iou.from_profile.username,
-          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
-        };
-        existing.balances[iou.description] = (existing.balances[iou.description] || 0) + iou.amount;
-        summaryMap.set(iou.from_user_id, existing);
+      const friendId = iou.from_user_id === currentUser.id ? iou.to_user_id : iou.from_user_id;
+
+      if (!statusMap.has(friendId)) {
+        statusMap.set(friendId, new Set());
+      }
+      statusMap.get(friendId)!.add(iou.status);
+
+      if (iou.status === 'confirmed') {
+        if (iou.from_user_id === currentUser.id) {
+          const existing = summaryMap.get(iou.to_user_id) || {
+            userId: iou.to_user_id,
+            username: iou.to_profile.username,
+            balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
+            overallStatus: 'confirmed' as const
+          };
+          existing.balances[iou.description] = (existing.balances[iou.description] || 0) - iou.amount;
+          summaryMap.set(iou.to_user_id, existing);
+        } else if (iou.to_user_id === currentUser.id) {
+          const existing = summaryMap.get(iou.from_user_id) || {
+            userId: iou.from_user_id,
+            username: iou.from_profile.username,
+            balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
+            overallStatus: 'confirmed' as const
+          };
+          existing.balances[iou.description] = (existing.balances[iou.description] || 0) + iou.amount;
+          summaryMap.set(iou.from_user_id, existing);
+        }
       }
     });
 
-    return Array.from(summaryMap.values()).filter((s) =>
+    const summaryArray = Array.from(summaryMap.values()).filter((s) =>
       Object.values(s.balances).some(amount => amount !== 0)
     );
+
+    summaryArray.forEach((summary) => {
+      const statuses = statusMap.get(summary.userId);
+      if (statuses?.has('disputed')) {
+        summary.overallStatus = 'disputed';
+      } else if (statuses?.has('pending_decrease')) {
+        summary.overallStatus = 'pending';
+      } else {
+        summary.overallStatus = 'confirmed';
+      }
+    });
+
+    return summaryArray;
+  };
+
+  const getPendingIOUs = () => {
+    if (!currentUser) return [];
+    return ious.filter(iou => iou.status === 'pending_decrease');
+  };
+
+  const getPendingCount = () => {
+    return getPendingIOUs().filter(iou => iou.requester_user_id !== currentUser?.id).length;
   };
 
   const summary = calculateSummary();
+  const pendingIOUs = getPendingIOUs();
 
   return (
     <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -261,19 +368,136 @@ export default function IOUDashboard() {
           </div>
 
           <div className="p-6">
+            {getPendingCount() > 0 && (
+              <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 text-amber-800">
+                  <Clock className="w-5 h-5" />
+                  <span className="font-medium">
+                    You have {getPendingCount()} pending confirmation{getPendingCount() > 1 ? 's' : ''} to review
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-4 flex gap-2">
+              <button
+                onClick={() => setFilter('all')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  filter === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFilter('pending')}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  filter === 'pending'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Pending {pendingIOUs.length > 0 && `(${pendingIOUs.length})`}
+              </button>
+            </div>
+
             <div className="grid md:grid-cols-2 gap-6 mb-8">
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 flex flex-col">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   Summary
                 </h2>
-                {summary.length === 0 ? (
+                {summary.length === 0 && pendingIOUs.length === 0 ? (
                   <p className="text-gray-500 text-sm">No IOUs yet</p>
                 ) : (
                   <div className="space-y-4 overflow-y-auto max-h-96 pr-2">
-                    {summary.map((s) => (
-                      <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm">
-                        <div className="font-semibold text-gray-800 mb-3">{s.username}</div>
+                    {(filter === 'all' || filter === 'pending') && pendingIOUs.length > 0 && (
+                      <div className="mb-4">
+                        <h3 className="text-sm font-bold text-amber-700 mb-2 flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          Pending Confirmations
+                        </h3>
+                        {pendingIOUs.map((iou) => {
+                          const isRequester = iou.requester_user_id === currentUser?.id;
+                          const otherUser = iou.from_user_id === currentUser?.id ? iou.to_profile : iou.from_profile;
+                          return (
+                            <div key={iou.id} className="bg-amber-50 border-l-4 border-amber-400 rounded-lg p-3 mb-2">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <div className="font-medium text-gray-800">{otherUser.username}</div>
+                                  <div className="text-sm text-gray-600 flex items-center gap-1">
+                                    <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
+                                    <span>-{iou.amount} × {iou.description}</span>
+                                  </div>
+                                  {iou.optional_note && (
+                                    <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
+                                  )}
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded ${
+                                  isRequester ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {isRequester ? 'Sent' : 'Review'}
+                                </span>
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                {isRequester ? (
+                                  <button
+                                    onClick={() => handleCancelPending(iou.id)}
+                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-1.5 px-3 rounded text-sm font-medium transition-colors"
+                                  >
+                                    Cancel Request
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => handleApprovePending(iou.id)}
+                                      className="flex-1 bg-green-500 hover:bg-green-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                      Approve
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeclinePending(iou.id)}
+                                      className="flex-1 bg-red-500 hover:bg-red-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                                    >
+                                      <X className="w-4 h-4" />
+                                      Decline
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {(filter === 'all' || filter === 'settled') && summary.map((s) => (
+                      <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-l-green-400">
+                        <div className="flex justify-between items-center mb-3">
+                          <div className="font-semibold text-gray-800">{s.username}</div>
+                          <div className="flex items-center gap-1">
+                            {s.overallStatus === 'confirmed' && (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center gap-1">
+                                <Check className="w-3 h-3" />
+                                Confirmed
+                              </span>
+                            )}
+                            {s.overallStatus === 'pending' && (
+                              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Pending
+                              </span>
+                            )}
+                            {s.overallStatus === 'disputed' && (
+                              <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                Disputed
+                              </span>
+                            )}
+                          </div>
+                        </div>
                         <div className="space-y-2">
                           {(Object.entries(s.balances) as [IOUType, number][])
                             .filter(([_, amount]) => amount !== 0)
@@ -296,12 +520,17 @@ export default function IOUDashboard() {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => handleSummaryAdjust(s.userId, type, -1)}
-                                      className="bg-red-100 hover:bg-red-200 text-red-600 p-1.5 rounded-lg transition-colors"
-                                    >
-                                      <Minus className="w-4 h-4" />
-                                    </button>
+                                    {!isOwed && (
+                                      <button
+                                        onClick={() => {
+                                          setMarkAsPaidModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
+                                          setMarkAsPaidAmount(Math.min(1, Math.abs(amount)));
+                                        }}
+                                        className="bg-blue-100 hover:bg-blue-200 text-blue-600 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                      >
+                                        Mark as Paid
+                                      </button>
+                                    )}
                                     <span className="font-bold text-lg text-gray-800 w-10 text-center">
                                       {Math.abs(amount)}
                                     </span>
@@ -401,6 +630,63 @@ export default function IOUDashboard() {
               </div>
             </div>
           </div>
+
+          {markAsPaidModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Mark as Paid</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount: {markAsPaidAmount} × {markAsPaidModal.type} {IOU_EMOJIS[markAsPaidModal.type]}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max={markAsPaidModal.maxAmount}
+                      value={markAsPaidAmount}
+                      onChange={(e) => setMarkAsPaidAmount(parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>1</span>
+                      <span>{markAsPaidModal.maxAmount}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Optional Note
+                    </label>
+                    <input
+                      type="text"
+                      value={markAsPaidNote}
+                      onChange={(e) => setMarkAsPaidNote(e.target.value)}
+                      placeholder="e.g., Paid at the coffee shop"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setMarkAsPaidModal(null);
+                        setMarkAsPaidAmount(1);
+                        setMarkAsPaidNote('');
+                      }}
+                      className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleMarkAsPaid}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+                    >
+                      Send for Confirmation
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
     </div>
   );
 }
