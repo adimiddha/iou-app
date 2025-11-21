@@ -231,16 +231,66 @@ export default function IOUDashboard() {
   };
 
   const handleApprovePending = async (iouId: string) => {
-    const { error } = await supabase
-      .from('ious')
-      .update({ status: 'confirmed' })
-      .eq('id', iouId);
+    if (!currentUser) return;
 
-    if (error) {
-      console.error('Error approving pending:', error);
+    const pendingIOU = ious.find(iou => iou.id === iouId);
+    if (!pendingIOU) return;
+
+    const friendId = pendingIOU.from_user_id === currentUser.id
+      ? pendingIOU.to_user_id
+      : pendingIOU.from_user_id;
+    const iouType = pendingIOU.description;
+    const decreaseAmount = pendingIOU.amount;
+    const payerId = pendingIOU.from_user_id;
+
+    const confirmedIOUs = ious.filter(
+      (iou) =>
+        iou.status === 'confirmed' &&
+        iou.description === iouType &&
+        ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+          (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
+    );
+
+    const currentBalance = confirmedIOUs.reduce((sum, iou) => {
+      if (iou.from_user_id === currentUser.id) {
+        return sum - iou.amount;
+      } else {
+        return sum + iou.amount;
+      }
+    }, 0);
+
+    let newBalance;
+    if (payerId === currentUser.id) {
+      newBalance = currentBalance + decreaseAmount;
     } else {
-      await loadIOUs();
+      newBalance = currentBalance - decreaseAmount;
     }
+
+    await supabase.from('ious').delete().or(
+      `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${iouType},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${iouType},status.eq.confirmed)`
+    );
+
+    await supabase.from('ious').delete().eq('id', iouId);
+
+    if (newBalance > 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: friendId,
+        to_user_id: currentUser.id,
+        description: iouType,
+        amount: newBalance,
+        status: 'confirmed'
+      }]);
+    } else if (newBalance < 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: currentUser.id,
+        to_user_id: friendId,
+        description: iouType,
+        amount: Math.abs(newBalance),
+        status: 'confirmed'
+      }]);
+    }
+
+    await loadIOUs();
   };
 
   const handleDeclinePending = async (iouId: string) => {
@@ -334,12 +384,18 @@ export default function IOUDashboard() {
     return ious.filter(iou => iou.status === 'pending_decrease');
   };
 
+  const getDisputedIOUs = () => {
+    if (!currentUser) return [];
+    return ious.filter(iou => iou.status === 'disputed');
+  };
+
   const getPendingCount = () => {
     return getPendingIOUs().filter(iou => iou.requester_user_id !== currentUser?.id).length;
   };
 
   const summary = calculateSummary();
   const pendingIOUs = getPendingIOUs();
+  const disputedIOUs = getDisputedIOUs();
 
   return (
     <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -368,12 +424,14 @@ export default function IOUDashboard() {
           </div>
 
           <div className="p-6">
-            {getPendingCount() > 0 && (
+            {(getPendingCount() > 0 || disputedIOUs.length > 0) && (
               <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 text-amber-800">
                   <Clock className="w-5 h-5" />
                   <span className="font-medium">
-                    You have {getPendingCount()} pending confirmation{getPendingCount() > 1 ? 's' : ''} to review
+                    {getPendingCount() > 0 && `You have ${getPendingCount()} pending confirmation${getPendingCount() > 1 ? 's' : ''} to review`}
+                    {getPendingCount() > 0 && disputedIOUs.length > 0 && ' and '}
+                    {disputedIOUs.length > 0 && `${disputedIOUs.length} disputed item${disputedIOUs.length > 1 ? 's' : ''}`}
                   </span>
                 </div>
               </div>
@@ -398,7 +456,7 @@ export default function IOUDashboard() {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                Pending {pendingIOUs.length > 0 && `(${pendingIOUs.length})`}
+                Pending {(pendingIOUs.length + disputedIOUs.length) > 0 && `(${pendingIOUs.length + disputedIOUs.length})`}
               </button>
             </div>
 
@@ -408,7 +466,7 @@ export default function IOUDashboard() {
                   <Users className="w-5 h-5" />
                   Summary
                 </h2>
-                {summary.length === 0 && pendingIOUs.length === 0 ? (
+                {summary.length === 0 && pendingIOUs.length === 0 && disputedIOUs.length === 0 ? (
                   <p className="text-gray-500 text-sm">No IOUs yet</p>
                 ) : (
                   <div className="space-y-4 overflow-y-auto max-h-96 pr-2">
@@ -465,6 +523,52 @@ export default function IOUDashboard() {
                                       Decline
                                     </button>
                                   </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {(filter === 'all' || filter === 'pending') && disputedIOUs.length > 0 && (
+                      <div className="mb-4">
+                        <h3 className="text-sm font-bold text-red-700 mb-2 flex items-center gap-1">
+                          <AlertCircle className="w-4 h-4" />
+                          Disputed Items
+                        </h3>
+                        {disputedIOUs.map((iou) => {
+                          const isRequester = iou.requester_user_id === currentUser?.id;
+                          const otherUser = iou.from_user_id === currentUser?.id ? iou.to_profile : iou.from_profile;
+                          return (
+                            <div key={iou.id} className="bg-red-50 border-l-4 border-red-400 rounded-lg p-3 mb-2">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <div className="font-medium text-gray-800">{otherUser.username}</div>
+                                  <div className="text-sm text-gray-600 flex items-center gap-1">
+                                    <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
+                                    <span>-{iou.amount} × {iou.description}</span>
+                                  </div>
+                                  {iou.optional_note && (
+                                    <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
+                                  )}
+                                </div>
+                                <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">
+                                  Disputed
+                                </span>
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                {isRequester ? (
+                                  <button
+                                    onClick={() => handleCancelPending(iou.id)}
+                                    className="flex-1 bg-red-500 hover:bg-red-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors"
+                                  >
+                                    Delete Request
+                                  </button>
+                                ) : (
+                                  <div className="flex-1 text-center text-sm text-gray-600 py-1.5">
+                                    Waiting for requester to withdraw
+                                  </div>
                                 )}
                               </div>
                             </div>
