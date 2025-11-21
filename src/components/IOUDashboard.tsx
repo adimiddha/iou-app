@@ -132,6 +132,7 @@ export default function IOUDashboard() {
         console.error('Error adding IOU:', error);
         alert('Failed to add IOU. Make sure you are friends with this user.');
       } else {
+        await loadIOUs();
         setSelectedUser('');
         setDescription('Coffee');
         setAmount(1);
@@ -152,6 +153,7 @@ export default function IOUDashboard() {
         .update({ amount: newAmount })
         .eq('id', iouId);
     }
+    await loadIOUs();
   };
 
   const handleSignOut = async () => {

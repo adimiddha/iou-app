@@ -146,6 +146,7 @@ export default function FriendRequests() {
       .from('friendships')
       .update({ status: 'accepted' })
       .eq('id', friendshipId);
+    await loadFriendships();
     showMessage('success', 'Friend request accepted!');
   };
 
@@ -154,6 +155,7 @@ export default function FriendRequests() {
       .from('friendships')
       .delete()
       .eq('id', friendshipId);
+    await loadFriendships();
     showMessage('success', 'Friend request rejected');
   };
 
@@ -162,6 +164,7 @@ export default function FriendRequests() {
       .from('friendships')
       .delete()
       .eq('id', friendshipId);
+    await loadFriendships();
     showMessage('success', 'Friend request cancelled');
   };
 
@@ -172,6 +175,7 @@ export default function FriendRequests() {
       .from('friendships')
       .delete()
       .eq('id', friendshipId);
+    await loadFriendships();
     showMessage('success', 'Friend removed');
   };
 
