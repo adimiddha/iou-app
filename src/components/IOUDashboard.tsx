@@ -596,15 +596,17 @@ export default function IOUDashboard() {
                                         Mark as Paid
                                       </button>
                                     )}
-                                    <span className="font-bold text-lg text-gray-800 w-10 text-center">
-                                      {Math.abs(amount)}
+                                    <span className="font-bold text-lg text-gray-800 w-16 text-center">
+                                      {isOwed ? amount : -Math.abs(amount)}
                                     </span>
-                                    <button
-                                      onClick={() => handleSummaryAdjust(s.userId, type, 1)}
-                                      className="bg-green-100 hover:bg-green-200 text-green-600 p-1.5 rounded-lg transition-colors"
-                                    >
-                                      <Plus className="w-4 h-4" />
-                                    </button>
+                                    {isOwed && (
+                                      <button
+                                        onClick={() => handleSummaryAdjust(s.userId, type, 1)}
+                                        className="bg-green-100 hover:bg-green-200 text-green-600 p-1.5 rounded-lg transition-colors"
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               );
