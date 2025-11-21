@@ -13,14 +13,15 @@ type IOUSummary = {
   balances: Record<IOUType, number>;
 };
 
-const IOU_TYPES: IOUType[] = ['Coffee', 'Beer', 'Meal', 'Walk', 'Ride'];
+const IOU_TYPES: IOUType[] = ['Coffee', 'Beer', 'Meal', 'Walk', 'Ride', 'Pizza'];
 
 const IOU_EMOJIS: Record<IOUType, string> = {
   Coffee: '☕',
   Beer: '🍺',
   Meal: '🍽️',
   Walk: '🚶',
-  Ride: '🚗'
+  Ride: '🚗',
+  Pizza: '🍕'
 };
 
 export default function IOUDashboard() {
@@ -152,15 +153,47 @@ export default function IOUDashboard() {
     }
   };
 
-  const handleUpdateAmount = async (iouId: string, newAmount: number) => {
-    if (newAmount <= 0) {
-      await supabase.from('ious').delete().eq('id', iouId);
-    } else {
-      await supabase
-        .from('ious')
-        .update({ amount: newAmount })
-        .eq('id', iouId);
+
+  const handleSummaryAdjust = async (friendId: string, iouType: IOUType, delta: number) => {
+    if (!currentUser) return;
+
+    const relevantIOUs = ious.filter(
+      (iou) =>
+        iou.description === iouType &&
+        ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+          (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
+    );
+
+    const currentBalance = relevantIOUs.reduce((sum, iou) => {
+      if (iou.from_user_id === currentUser.id) {
+        return sum - iou.amount;
+      } else {
+        return sum + iou.amount;
+      }
+    }, 0);
+
+    const newBalance = currentBalance + delta;
+
+    await supabase.from('ious').delete().or(
+      `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${iouType}),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${iouType})`
+    );
+
+    if (newBalance > 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: friendId,
+        to_user_id: currentUser.id,
+        description: iouType,
+        amount: newBalance
+      }]);
+    } else if (newBalance < 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: currentUser.id,
+        to_user_id: friendId,
+        description: iouType,
+        amount: Math.abs(newBalance)
+      }]);
     }
+
     await loadIOUs();
   };
 
@@ -179,7 +212,7 @@ export default function IOUDashboard() {
         const existing = summaryMap.get(iou.to_user_id) || {
           userId: iou.to_user_id,
           username: iou.to_profile.username,
-          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0 },
+          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
         };
         existing.balances[iou.description] = (existing.balances[iou.description] || 0) - iou.amount;
         summaryMap.set(iou.to_user_id, existing);
@@ -187,7 +220,7 @@ export default function IOUDashboard() {
         const existing = summaryMap.get(iou.from_user_id) || {
           userId: iou.from_user_id,
           username: iou.from_profile.username,
-          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0 },
+          balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
         };
         existing.balances[iou.description] = (existing.balances[iou.description] || 0) + iou.amount;
         summaryMap.set(iou.from_user_id, existing);
@@ -229,7 +262,7 @@ export default function IOUDashboard() {
 
           <div className="p-6">
             <div className="grid md:grid-cols-2 gap-6 mb-8">
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 flex flex-col">
                 <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <Users className="w-5 h-5" />
                   Summary
@@ -237,29 +270,51 @@ export default function IOUDashboard() {
                 {summary.length === 0 ? (
                   <p className="text-gray-500 text-sm">No IOUs yet</p>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-4 overflow-y-auto max-h-96 pr-2">
                     {summary.map((s) => (
                       <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm">
-                        <div className="font-semibold text-gray-800 mb-2">{s.username}</div>
-                        <div className="space-y-1">
+                        <div className="font-semibold text-gray-800 mb-3">{s.username}</div>
+                        <div className="space-y-2">
                           {(Object.entries(s.balances) as [IOUType, number][])
                             .filter(([_, amount]) => amount !== 0)
-                            .map(([type, amount]) => (
-                              <div key={type} className="flex justify-between items-center">
-                                <span className="text-gray-600 flex items-center gap-1">
-                                  <span className="text-xl">{IOU_EMOJIS[type]}</span>
-                                  <span className="text-sm">{type}</span>
-                                </span>
-                                <span
-                                  className={`font-bold ${
-                                    amount > 0 ? 'text-green-600' : 'text-red-600'
+                            .map(([type, amount]) => {
+                              const isOwed = amount > 0;
+                              return (
+                                <div
+                                  key={type}
+                                  className={`flex justify-between items-center p-2 rounded-lg border-l-4 ${
+                                    isOwed ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50'
                                   }`}
                                 >
-                                  {amount > 0 ? '+' : ''}
-                                  {amount}
-                                </span>
-                              </div>
-                            ))}
+                                  <div className="flex items-center gap-2 flex-1">
+                                    <span className="text-2xl">{IOU_EMOJIS[type]}</span>
+                                    <div className="flex flex-col">
+                                      <span className="text-xs text-gray-600 font-medium">{type}</span>
+                                      <span className="text-xs text-gray-500">
+                                        {isOwed ? 'They owe you' : 'You owe them'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleSummaryAdjust(s.userId, type, -1)}
+                                      className="bg-red-100 hover:bg-red-200 text-red-600 p-1.5 rounded-lg transition-colors"
+                                    >
+                                      <Minus className="w-4 h-4" />
+                                    </button>
+                                    <span className="font-bold text-lg text-gray-800 w-10 text-center">
+                                      {Math.abs(amount)}
+                                    </span>
+                                    <button
+                                      onClick={() => handleSummaryAdjust(s.userId, type, 1)}
+                                      className="bg-green-100 hover:bg-green-200 text-green-600 p-1.5 rounded-lg transition-colors"
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                         </div>
                       </div>
                     ))}
@@ -344,77 +399,6 @@ export default function IOUDashboard() {
                   </button>
                 </form>
               </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-6">
-              <h2 className="text-xl font-bold text-gray-800 mb-4">All IOUs</h2>
-              {ious.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">
-                  No IOUs recorded yet. Add one above to get started!
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {ious.map((iou) => {
-                    const isOwing = iou.from_user_id === currentUser?.id;
-                    return (
-                      <div
-                        key={iou.id}
-                        className={`bg-white rounded-lg p-4 shadow-sm border-l-4 ${
-                          isOwing ? 'border-red-400' : 'border-green-400'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div className="flex-1">
-                            <p className="font-medium text-gray-800">
-                              {isOwing ? (
-                                <>
-                                  You owe{' '}
-                                  <span className="text-blue-600">
-                                    {iou.to_profile.username}
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="text-blue-600">
-                                    {iou.from_profile.username}
-                                  </span>{' '}
-                                  owes you
-                                </>
-                              )}
-                            </p>
-                            <p className="text-sm text-gray-600 flex items-center gap-1">
-                              <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
-                              <span>{iou.amount} × {iou.description}</span>
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() =>
-                                handleUpdateAmount(iou.id, iou.amount - 1)
-                              }
-                              className="bg-red-100 hover:bg-red-200 text-red-600 p-2 rounded-lg transition-colors"
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <span className="font-bold text-lg text-gray-800 w-8 text-center">
-                              {iou.amount}
-                            </span>
-                            <button
-                              onClick={() =>
-                                handleUpdateAmount(iou.id, iou.amount + 1)
-                              }
-                              className="bg-green-100 hover:bg-green-200 text-green-600 p-2 rounded-lg transition-colors"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           </div>
     </div>

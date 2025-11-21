@@ -11,7 +11,7 @@ export type Profile = {
   created_at: string;
 };
 
-export type IOUType = 'Coffee' | 'Beer' | 'Meal' | 'Walk' | 'Ride';
+export type IOUType = 'Coffee' | 'Beer' | 'Meal' | 'Walk' | 'Ride' | 'Pizza';
 
 export type IOU = {
   id: string;
