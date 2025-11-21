@@ -328,16 +328,8 @@ export default function IOUDashboard() {
     if (!currentUser) return [];
 
     const summaryMap = new Map<string, IOUSummary>();
-    const statusMap = new Map<string, Set<IOUStatus>>();
 
     ious.forEach((iou) => {
-      const friendId = iou.from_user_id === currentUser.id ? iou.to_user_id : iou.from_user_id;
-
-      if (!statusMap.has(friendId)) {
-        statusMap.set(friendId, new Set());
-      }
-      statusMap.get(friendId)!.add(iou.status);
-
       if (iou.status === 'confirmed') {
         if (iou.from_user_id === currentUser.id) {
           const existing = summaryMap.get(iou.to_user_id) || {
@@ -364,17 +356,6 @@ export default function IOUDashboard() {
     const summaryArray = Array.from(summaryMap.values()).filter((s) =>
       Object.values(s.balances).some(amount => amount !== 0)
     );
-
-    summaryArray.forEach((summary) => {
-      const statuses = statusMap.get(summary.userId);
-      if (statuses?.has('disputed')) {
-        summary.overallStatus = 'disputed';
-      } else if (statuses?.has('pending_decrease')) {
-        summary.overallStatus = 'pending';
-      } else {
-        summary.overallStatus = 'confirmed';
-      }
-    });
 
     return summaryArray;
   };
@@ -581,26 +562,6 @@ export default function IOUDashboard() {
                       <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-l-green-400">
                         <div className="flex justify-between items-center mb-3">
                           <div className="font-semibold text-gray-800">{s.username}</div>
-                          <div className="flex items-center gap-1">
-                            {s.overallStatus === 'confirmed' && (
-                              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded flex items-center gap-1">
-                                <Check className="w-3 h-3" />
-                                Confirmed
-                              </span>
-                            )}
-                            {s.overallStatus === 'pending' && (
-                              <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                Pending
-                              </span>
-                            )}
-                            {s.overallStatus === 'disputed' && (
-                              <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3" />
-                                Disputed
-                              </span>
-                            )}
-                          </div>
                         </div>
                         <div className="space-y-2">
                           {(Object.entries(s.balances) as [IOUType, number][])
