@@ -138,6 +138,8 @@ export default function IOUDashboard() {
         to_user_id: direction === 'owe' ? selectedUser : currentUser.id,
         description,
         amount,
+        status: 'pending' as IOUStatus,
+        requester_user_id: currentUser.id
       };
 
       const { error } = await supabase.from('ious').insert([iouData]);
@@ -319,6 +321,32 @@ export default function IOUDashboard() {
     }
   };
 
+  const handleAcceptNewIOU = async (iouId: string) => {
+    const { error } = await supabase
+      .from('ious')
+      .update({ status: 'confirmed' })
+      .eq('id', iouId);
+
+    if (error) {
+      console.error('Error accepting new IOU:', error);
+    } else {
+      await loadIOUs();
+    }
+  };
+
+  const handleDeclineNewIOU = async (iouId: string) => {
+    const { error } = await supabase
+      .from('ious')
+      .delete()
+      .eq('id', iouId);
+
+    if (error) {
+      console.error('Error declining new IOU:', error);
+    } else {
+      await loadIOUs();
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     window.location.reload();
@@ -361,6 +389,16 @@ export default function IOUDashboard() {
   };
 
   const getPendingIOUs = () => {
+    if (!currentUser) return [];
+    return ious.filter(iou => iou.status === 'pending' || iou.status === 'pending_decrease');
+  };
+
+  const getNewPendingIOUs = () => {
+    if (!currentUser) return [];
+    return ious.filter(iou => iou.status === 'pending');
+  };
+
+  const getPendingDecreaseIOUs = () => {
     if (!currentUser) return [];
     return ious.filter(iou => iou.status === 'pending_decrease');
   };
@@ -451,13 +489,75 @@ export default function IOUDashboard() {
                   <p className="text-gray-500 text-sm">No IOUs yet</p>
                 ) : (
                   <div className="space-y-4 overflow-y-auto max-h-96 pr-2">
-                    {(filter === 'all' || filter === 'pending') && pendingIOUs.length > 0 && (
+                    {(filter === 'all' || filter === 'pending') && getNewPendingIOUs().length > 0 && (
+                      <div className="mb-4">
+                        <h3 className="text-sm font-bold text-blue-700 mb-2 flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          New IOUs Awaiting Acceptance
+                        </h3>
+                        {getNewPendingIOUs().map((iou) => {
+                          const isRequester = iou.requester_user_id === currentUser?.id;
+                          const otherUser = iou.from_user_id === currentUser?.id ? iou.to_profile : iou.from_profile;
+                          const isPayer = iou.from_user_id === currentUser?.id;
+                          return (
+                            <div key={iou.id} className="bg-blue-50 border-l-4 border-blue-400 rounded-lg p-3 mb-2">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <div className="font-medium text-gray-800">{otherUser.username}</div>
+                                  <div className="text-sm text-gray-600 flex items-center gap-1">
+                                    <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
+                                    <span>{isPayer ? 'You owe' : 'Owes you'}: {iou.amount} × {iou.description}</span>
+                                  </div>
+                                  {iou.optional_note && (
+                                    <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
+                                  )}
+                                </div>
+                                <span className={`text-xs px-2 py-1 rounded ${
+                                  isRequester ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                                }`}>
+                                  {isRequester ? 'Sent' : 'Review'}
+                                </span>
+                              </div>
+                              <div className="flex gap-2 mt-2">
+                                {isRequester ? (
+                                  <button
+                                    onClick={() => handleCancelPending(iou.id)}
+                                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-1.5 px-3 rounded text-sm font-medium transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => handleAcceptNewIOU(iou.id)}
+                                      className="flex-1 bg-green-500 hover:bg-green-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                      Accept
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeclineNewIOU(iou.id)}
+                                      className="flex-1 bg-red-500 hover:bg-red-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1"
+                                    >
+                                      <X className="w-4 h-4" />
+                                      Decline
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {(filter === 'all' || filter === 'pending') && getPendingDecreaseIOUs().length > 0 && (
                       <div className="mb-4">
                         <h3 className="text-sm font-bold text-amber-700 mb-2 flex items-center gap-1">
                           <Clock className="w-4 h-4" />
-                          Pending Confirmations
+                          Payment Confirmations
                         </h3>
-                        {pendingIOUs.map((iou) => {
+                        {getPendingDecreaseIOUs().map((iou) => {
                           const isRequester = iou.requester_user_id === currentUser?.id;
                           const otherUser = iou.from_user_id === currentUser?.id ? iou.to_profile : iou.from_profile;
                           return (
@@ -584,29 +684,33 @@ export default function IOUDashboard() {
                                       </span>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    {!isOwed && (
-                                      <button
-                                        onClick={() => {
-                                          setMarkAsPaidModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
-                                          setMarkAsPaidAmount(Math.min(1, Math.abs(amount)));
-                                        }}
-                                        className="bg-blue-100 hover:bg-blue-200 text-blue-600 py-1 px-2 rounded text-xs font-medium transition-colors"
-                                      >
-                                        Mark as Paid
-                                      </button>
-                                    )}
+                                  <div className="flex items-center gap-2 justify-end">
                                     <span className="font-bold text-lg text-gray-800 w-16 text-center">
                                       {isOwed ? amount : -Math.abs(amount)}
                                     </span>
-                                    {isOwed && (
-                                      <button
-                                        onClick={() => handleSummaryAdjust(s.userId, type, 1)}
-                                        className="bg-green-100 hover:bg-green-200 text-green-600 p-1.5 rounded-lg transition-colors"
-                                      >
-                                        <Plus className="w-4 h-4" />
-                                      </button>
-                                    )}
+                                    <div className="w-28 flex justify-end">
+                                      {isOwed && (
+                                        <button
+                                          onClick={() => {
+                                            setMarkAsPaidModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
+                                            setMarkAsPaidAmount(Math.min(1, Math.abs(amount)));
+                                          }}
+                                          className="bg-blue-100 hover:bg-blue-200 text-blue-600 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                        >
+                                          Mark as Paid
+                                        </button>
+                                      )}
+                                    </div>
+                                    <div className="w-10 flex justify-center">
+                                      {isOwed && (
+                                        <button
+                                          onClick={() => handleSummaryAdjust(s.userId, type, 1)}
+                                          className="bg-green-100 hover:bg-green-200 text-green-600 p-1.5 rounded-lg transition-colors"
+                                        >
+                                          <Plus className="w-4 h-4" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               );
