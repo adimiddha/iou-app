@@ -35,9 +35,19 @@ export default function IOUDashboard() {
   const [direction, setDirection] = useState<'owe' | 'owed'>('owe');
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'settled'>('all');
-  const [markAsPaidModal, setMarkAsPaidModal] = useState<{ friendId: string; type: IOUType; maxAmount: number } | null>(null);
-  const [markAsPaidAmount, setMarkAsPaidAmount] = useState(1);
-  const [markAsPaidNote, setMarkAsPaidNote] = useState('');
+  const [generousDecreaseModal, setGenerousDecreaseModal] = useState<{ friendId: string; type: IOUType; maxAmount: number } | null>(null);
+  const [generousDecreaseAmount, setGenerousDecreaseAmount] = useState(1);
+  const [generousDecreaseNote, setGenerousDecreaseNote] = useState('');
+
+  const [selfishIncreaseModal, setSelfishIncreaseModal] = useState<{ friendId: string; type: IOUType } | null>(null);
+  const [selfishIncreaseNote, setSelfishIncreaseNote] = useState('');
+
+  const [generousIncreaseModal, setGenerousIncreaseModal] = useState<{ friendId: string; type: IOUType } | null>(null);
+  const [generousIncreaseNote, setGenerousIncreaseNote] = useState('');
+
+  const [settleUpModal, setSettleUpModal] = useState<{ friendId: string; type: IOUType; maxAmount: number } | null>(null);
+  const [settleUpAmount, setSettleUpAmount] = useState(1);
+  const [settleUpNote, setSettleUpNote] = useState('');
 
   useEffect(() => {
     loadUserData();
@@ -138,7 +148,7 @@ export default function IOUDashboard() {
         to_user_id: direction === 'owe' ? selectedUser : currentUser.id,
         description,
         amount,
-        status: 'pending' as IOUStatus,
+        status: direction === 'owe' ? 'confirmed' as IOUStatus : 'pending' as IOUStatus,
         requester_user_id: currentUser.id
       };
 
@@ -204,18 +214,146 @@ export default function IOUDashboard() {
     await loadIOUs();
   };
 
-  const handleMarkAsPaid = async () => {
-    if (!currentUser || !markAsPaidModal) return;
+  const handleGenerousDecrease = async () => {
+    if (!currentUser || !generousDecreaseModal) return;
 
-    const { friendId, type } = markAsPaidModal;
+    const { friendId, type } = generousDecreaseModal;
+
+    const confirmedIOUs = ious.filter(
+      (iou) =>
+        iou.status === 'confirmed' &&
+        iou.description === type &&
+        ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+          (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
+    );
+
+    const currentBalance = confirmedIOUs.reduce((sum, iou) => {
+      if (iou.from_user_id === currentUser.id) {
+        return sum - iou.amount;
+      } else {
+        return sum + iou.amount;
+      }
+    }, 0);
+
+    const newBalance = currentBalance - generousDecreaseAmount;
+
+    await supabase.from('ious').delete().or(
+      `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
+    );
+
+    if (newBalance > 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: friendId,
+        to_user_id: currentUser.id,
+        description: type,
+        amount: newBalance,
+        status: 'confirmed'
+      }]);
+    } else if (newBalance < 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: currentUser.id,
+        to_user_id: friendId,
+        description: type,
+        amount: Math.abs(newBalance),
+        status: 'confirmed'
+      }]);
+    }
+
+    await loadIOUs();
+    setGenerousDecreaseModal(null);
+    setGenerousDecreaseAmount(1);
+    setGenerousDecreaseNote('');
+  };
+
+  const handleSelfishIncrease = async () => {
+    if (!currentUser || !selfishIncreaseModal) return;
+
+    const { friendId, type } = selfishIncreaseModal;
+
+    const iouData = {
+      from_user_id: friendId,
+      to_user_id: currentUser.id,
+      description: type,
+      amount: 1,
+      status: 'pending' as IOUStatus,
+      optional_note: selfishIncreaseNote || null,
+      requester_user_id: currentUser.id
+    };
+
+    const { error } = await supabase.from('ious').insert([iouData]);
+
+    if (error) {
+      console.error('Error creating pending increase:', error);
+      alert('Failed to add more');
+    } else {
+      await loadIOUs();
+      setSelfishIncreaseModal(null);
+      setSelfishIncreaseNote('');
+    }
+  };
+
+  const handleGenerousIncrease = async () => {
+    if (!currentUser || !generousIncreaseModal) return;
+
+    const { friendId, type } = generousIncreaseModal;
+
+    const confirmedIOUs = ious.filter(
+      (iou) =>
+        iou.status === 'confirmed' &&
+        iou.description === type &&
+        ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+          (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
+    );
+
+    const currentBalance = confirmedIOUs.reduce((sum, iou) => {
+      if (iou.from_user_id === currentUser.id) {
+        return sum - iou.amount;
+      } else {
+        return sum + iou.amount;
+      }
+    }, 0);
+
+    const newBalance = currentBalance - 1;
+
+    await supabase.from('ious').delete().or(
+      `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
+    );
+
+    if (newBalance > 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: friendId,
+        to_user_id: currentUser.id,
+        description: type,
+        amount: newBalance,
+        status: 'confirmed'
+      }]);
+    } else if (newBalance < 0) {
+      await supabase.from('ious').insert([{
+        from_user_id: currentUser.id,
+        to_user_id: friendId,
+        description: type,
+        amount: Math.abs(newBalance),
+        status: 'confirmed'
+      }]);
+    }
+
+    await loadIOUs();
+    setGenerousIncreaseModal(null);
+    setGenerousIncreaseNote('');
+  };
+
+  const handleSettleUp = async () => {
+    if (!currentUser || !settleUpModal) return;
+
+    const { friendId, type } = settleUpModal;
 
     const iouData = {
       from_user_id: currentUser.id,
       to_user_id: friendId,
       description: type,
-      amount: markAsPaidAmount,
+      amount: settleUpAmount,
       status: 'pending_decrease' as IOUStatus,
-      optional_note: markAsPaidNote || null,
+      optional_note: settleUpNote || null,
       requester_user_id: currentUser.id
     };
 
@@ -223,12 +361,12 @@ export default function IOUDashboard() {
 
     if (error) {
       console.error('Error creating pending decrease:', error);
-      alert('Failed to mark as paid');
+      alert('Failed to settle up');
     } else {
       await loadIOUs();
-      setMarkAsPaidModal(null);
-      setMarkAsPaidAmount(1);
-      setMarkAsPaidNote('');
+      setSettleUpModal(null);
+      setSettleUpAmount(1);
+      setSettleUpNote('');
     }
   };
 
@@ -688,29 +826,57 @@ export default function IOUDashboard() {
                                     <span className="font-bold text-lg text-gray-800 w-16 text-center">
                                       {isOwed ? amount : -Math.abs(amount)}
                                     </span>
-                                    <div className="w-28 flex justify-end">
-                                      {isOwed && (
-                                        <button
-                                          onClick={() => {
-                                            setMarkAsPaidModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
-                                            setMarkAsPaidAmount(Math.min(1, Math.abs(amount)));
-                                          }}
-                                          className="bg-blue-100 hover:bg-blue-200 text-blue-600 py-1 px-2 rounded text-xs font-medium transition-colors"
-                                        >
-                                          Mark as Paid
-                                        </button>
-                                      )}
-                                    </div>
-                                    <div className="w-10 flex justify-center">
-                                      {isOwed && (
-                                        <button
-                                          onClick={() => handleSummaryAdjust(s.userId, type, 1)}
-                                          className="bg-green-100 hover:bg-green-200 text-green-600 p-1.5 rounded-lg transition-colors"
-                                        >
-                                          <Plus className="w-4 h-4" />
-                                        </button>
-                                      )}
-                                    </div>
+                                    {isOwed ? (
+                                      <>
+                                        <div className="w-10 flex justify-center">
+                                          <button
+                                            onClick={() => {
+                                              setGenerousDecreaseModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
+                                              setGenerousDecreaseAmount(Math.min(1, Math.abs(amount)));
+                                            }}
+                                            className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg transition-colors"
+                                            title="Forgive debt (instant)"
+                                          >
+                                            <Minus className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                        <div className="w-24 flex justify-end">
+                                          <button
+                                            onClick={() => {
+                                              setSelfishIncreaseModal({ friendId: s.userId, type });
+                                            }}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-xs font-medium transition-colors"
+                                          >
+                                            Add More
+                                          </button>
+                                        </div>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <div className="w-24 flex justify-end">
+                                          <button
+                                            onClick={() => {
+                                              setSettleUpModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
+                                              setSettleUpAmount(Math.min(1, Math.abs(amount)));
+                                            }}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded text-xs font-medium transition-colors"
+                                          >
+                                            Settle Up
+                                          </button>
+                                        </div>
+                                        <div className="w-10 flex justify-center">
+                                          <button
+                                            onClick={() => {
+                                              setGenerousIncreaseModal({ friendId: s.userId, type });
+                                            }}
+                                            className="bg-green-500 hover:bg-green-600 text-white p-2 rounded-lg transition-colors"
+                                            title="Add to what you owe (instant)"
+                                          >
+                                            <Plus className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -802,26 +968,27 @@ export default function IOUDashboard() {
             </div>
           </div>
 
-          {markAsPaidModal && (
+          {generousDecreaseModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Mark as Paid</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Forgive Debt</h3>
+                <p className="text-sm text-gray-600 mb-4">This will instantly reduce what they owe you. No approval needed.</p>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Amount: {markAsPaidAmount} × {markAsPaidModal.type} {IOU_EMOJIS[markAsPaidModal.type]}
+                      Amount: {generousDecreaseAmount} × {generousDecreaseModal.type} {IOU_EMOJIS[generousDecreaseModal.type]}
                     </label>
                     <input
                       type="range"
                       min="1"
-                      max={markAsPaidModal.maxAmount}
-                      value={markAsPaidAmount}
-                      onChange={(e) => setMarkAsPaidAmount(parseInt(e.target.value))}
+                      max={generousDecreaseModal.maxAmount}
+                      value={generousDecreaseAmount}
+                      onChange={(e) => setGenerousDecreaseAmount(parseInt(e.target.value))}
                       className="w-full"
                     />
                     <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>1</span>
-                      <span>{markAsPaidModal.maxAmount}</span>
+                      <span>{generousDecreaseModal.maxAmount}</span>
                     </div>
                   </div>
                   <div>
@@ -830,8 +997,148 @@ export default function IOUDashboard() {
                     </label>
                     <input
                       type="text"
-                      value={markAsPaidNote}
-                      onChange={(e) => setMarkAsPaidNote(e.target.value)}
+                      value={generousDecreaseNote}
+                      onChange={(e) => setGenerousDecreaseNote(e.target.value)}
+                      placeholder="e.g., No worries!"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setGenerousDecreaseModal(null);
+                        setGenerousDecreaseAmount(1);
+                        setGenerousDecreaseNote('');
+                      }}
+                      className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleGenerousDecrease}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+                    >
+                      Forgive
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selfishIncreaseModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Add More</h3>
+                <p className="text-sm text-gray-600 mb-4">Request to add 1 more {selfishIncreaseModal.type} to what they owe you. They must approve.</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Note (Required)
+                    </label>
+                    <input
+                      type="text"
+                      value={selfishIncreaseNote}
+                      onChange={(e) => setSelfishIncreaseNote(e.target.value)}
+                      placeholder="e.g., For helping with the project"
+                      required
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setSelfishIncreaseModal(null);
+                        setSelfishIncreaseNote('');
+                      }}
+                      className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSelfishIncrease}
+                      disabled={!selfishIncreaseNote}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      Request
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {generousIncreaseModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Add to What You Owe</h3>
+                <p className="text-sm text-gray-600 mb-4">This will instantly add 1 {generousIncreaseModal.type} to what you owe them. No approval needed.</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Optional Note
+                    </label>
+                    <input
+                      type="text"
+                      value={generousIncreaseNote}
+                      onChange={(e) => setGenerousIncreaseNote(e.target.value)}
+                      placeholder="e.g., For the dinner last night"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => {
+                        setGenerousIncreaseModal(null);
+                        setGenerousIncreaseNote('');
+                      }}
+                      className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleGenerousIncrease}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {settleUpModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Settle Up</h3>
+                <p className="text-sm text-gray-600 mb-4">Request confirmation that you paid them back. They must approve.</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Amount: {settleUpAmount} × {settleUpModal.type} {IOU_EMOJIS[settleUpModal.type]}
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max={settleUpModal.maxAmount}
+                      value={settleUpAmount}
+                      onChange={(e) => setSettleUpAmount(parseInt(e.target.value))}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>1</span>
+                      <span>{settleUpModal.maxAmount}</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Optional Note
+                    </label>
+                    <input
+                      type="text"
+                      value={settleUpNote}
+                      onChange={(e) => setSettleUpNote(e.target.value)}
                       placeholder="e.g., Paid at the coffee shop"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -839,19 +1146,19 @@ export default function IOUDashboard() {
                   <div className="flex gap-3 mt-6">
                     <button
                       onClick={() => {
-                        setMarkAsPaidModal(null);
-                        setMarkAsPaidAmount(1);
-                        setMarkAsPaidNote('');
+                        setSettleUpModal(null);
+                        setSettleUpAmount(1);
+                        setSettleUpNote('');
                       }}
                       className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
                     >
                       Cancel
                     </button>
                     <button
-                      onClick={handleMarkAsPaid}
+                      onClick={handleSettleUp}
                       className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium transition-colors"
                     >
-                      Send for Confirmation
+                      Request Confirmation
                     </button>
                   </div>
                 </div>
