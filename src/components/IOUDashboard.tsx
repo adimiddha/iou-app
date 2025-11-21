@@ -219,50 +219,60 @@ export default function IOUDashboard() {
 
     const { friendId, type } = generousDecreaseModal;
 
-    const confirmedIOUs = ious.filter(
-      (iou) =>
-        iou.status === 'confirmed' &&
-        iou.description === type &&
-        ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
-          (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
-    );
+    try {
+      const confirmedIOUs = ious.filter(
+        (iou) =>
+          iou.status === 'confirmed' &&
+          iou.description === type &&
+          ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+            (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
+      );
 
-    const currentBalance = confirmedIOUs.reduce((sum, iou) => {
-      if (iou.from_user_id === currentUser.id) {
-        return sum - iou.amount;
-      } else {
-        return sum + iou.amount;
+      const currentBalance = confirmedIOUs.reduce((sum, iou) => {
+        if (iou.from_user_id === currentUser.id) {
+          return sum - iou.amount;
+        } else {
+          return sum + iou.amount;
+        }
+      }, 0);
+
+      if (currentBalance <= 0) {
+        alert('Balance has changed. They no longer owe you anything.');
+        setGenerousDecreaseModal(null);
+        await loadIOUs();
+        return;
       }
-    }, 0);
 
-    const newBalance = currentBalance - generousDecreaseAmount;
+      const actualDecreaseAmount = Math.min(generousDecreaseAmount, currentBalance);
+      const newBalance = currentBalance - actualDecreaseAmount;
 
-    await supabase.from('ious').delete().or(
-      `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
-    );
+      const { error: deleteError } = await supabase.from('ious').delete().or(
+        `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
+      );
 
-    if (newBalance > 0) {
-      await supabase.from('ious').insert([{
-        from_user_id: friendId,
-        to_user_id: currentUser.id,
-        description: type,
-        amount: newBalance,
-        status: 'confirmed'
-      }]);
-    } else if (newBalance < 0) {
-      await supabase.from('ious').insert([{
-        from_user_id: currentUser.id,
-        to_user_id: friendId,
-        description: type,
-        amount: Math.abs(newBalance),
-        status: 'confirmed'
-      }]);
+      if (deleteError) throw deleteError;
+
+      if (newBalance > 0) {
+        const { error: insertError } = await supabase.from('ious').insert([{
+          from_user_id: friendId,
+          to_user_id: currentUser.id,
+          description: type,
+          amount: newBalance,
+          status: 'confirmed'
+        }]);
+
+        if (insertError) throw insertError;
+      }
+
+      await loadIOUs();
+      setGenerousDecreaseModal(null);
+      setGenerousDecreaseAmount(1);
+      setGenerousDecreaseNote('');
+    } catch (error) {
+      console.error('Error forgiving debt:', error);
+      alert('Failed to forgive debt. Please try again.');
+      await loadIOUs();
     }
-
-    await loadIOUs();
-    setGenerousDecreaseModal(null);
-    setGenerousDecreaseAmount(1);
-    setGenerousDecreaseNote('');
   };
 
   const handleSelfishIncrease = async () => {
@@ -270,25 +280,27 @@ export default function IOUDashboard() {
 
     const { friendId, type } = selfishIncreaseModal;
 
-    const iouData = {
-      from_user_id: friendId,
-      to_user_id: currentUser.id,
-      description: type,
-      amount: 1,
-      status: 'pending' as IOUStatus,
-      optional_note: selfishIncreaseNote || null,
-      requester_user_id: currentUser.id
-    };
+    try {
+      const iouData = {
+        from_user_id: friendId,
+        to_user_id: currentUser.id,
+        description: type,
+        amount: 1,
+        status: 'pending' as IOUStatus,
+        optional_note: selfishIncreaseNote || null,
+        requester_user_id: currentUser.id
+      };
 
-    const { error } = await supabase.from('ious').insert([iouData]);
+      const { error } = await supabase.from('ious').insert([iouData]);
 
-    if (error) {
-      console.error('Error creating pending increase:', error);
-      alert('Failed to add more');
-    } else {
+      if (error) throw error;
+
       await loadIOUs();
       setSelfishIncreaseModal(null);
       setSelfishIncreaseNote('');
+    } catch (error) {
+      console.error('Error creating pending increase:', error);
+      alert('Failed to send request. Please try again.');
     }
   };
 
@@ -297,76 +309,115 @@ export default function IOUDashboard() {
 
     const { friendId, type } = generousIncreaseModal;
 
-    const confirmedIOUs = ious.filter(
-      (iou) =>
-        iou.status === 'confirmed' &&
-        iou.description === type &&
-        ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
-          (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
-    );
+    try {
+      const confirmedIOUs = ious.filter(
+        (iou) =>
+          iou.status === 'confirmed' &&
+          iou.description === type &&
+          ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+            (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
+      );
 
-    const currentBalance = confirmedIOUs.reduce((sum, iou) => {
-      if (iou.from_user_id === currentUser.id) {
-        return sum - iou.amount;
-      } else {
-        return sum + iou.amount;
+      const currentBalance = confirmedIOUs.reduce((sum, iou) => {
+        if (iou.from_user_id === currentUser.id) {
+          return sum - iou.amount;
+        } else {
+          return sum + iou.amount;
+        }
+      }, 0);
+
+      const newBalance = currentBalance - 1;
+
+      const { error: deleteError } = await supabase.from('ious').delete().or(
+        `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
+      );
+
+      if (deleteError) throw deleteError;
+
+      if (newBalance > 0) {
+        const { error: insertError } = await supabase.from('ious').insert([{
+          from_user_id: friendId,
+          to_user_id: currentUser.id,
+          description: type,
+          amount: newBalance,
+          status: 'confirmed'
+        }]);
+
+        if (insertError) throw insertError;
+      } else if (newBalance < 0) {
+        const { error: insertError } = await supabase.from('ious').insert([{
+          from_user_id: currentUser.id,
+          to_user_id: friendId,
+          description: type,
+          amount: Math.abs(newBalance),
+          status: 'confirmed'
+        }]);
+
+        if (insertError) throw insertError;
       }
-    }, 0);
 
-    const newBalance = currentBalance - 1;
-
-    await supabase.from('ious').delete().or(
-      `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
-    );
-
-    if (newBalance > 0) {
-      await supabase.from('ious').insert([{
-        from_user_id: friendId,
-        to_user_id: currentUser.id,
-        description: type,
-        amount: newBalance,
-        status: 'confirmed'
-      }]);
-    } else if (newBalance < 0) {
-      await supabase.from('ious').insert([{
-        from_user_id: currentUser.id,
-        to_user_id: friendId,
-        description: type,
-        amount: Math.abs(newBalance),
-        status: 'confirmed'
-      }]);
+      await loadIOUs();
+      setGenerousIncreaseModal(null);
+      setGenerousIncreaseNote('');
+    } catch (error) {
+      console.error('Error adding to your IOU:', error);
+      alert('Failed to add to your IOU. Please try again.');
+      await loadIOUs();
     }
-
-    await loadIOUs();
-    setGenerousIncreaseModal(null);
-    setGenerousIncreaseNote('');
   };
 
   const handleSettleUp = async () => {
     if (!currentUser || !settleUpModal) return;
 
-    const { friendId, type } = settleUpModal;
+    const { friendId, type, maxAmount } = settleUpModal;
 
-    const iouData = {
-      from_user_id: currentUser.id,
-      to_user_id: friendId,
-      description: type,
-      amount: settleUpAmount,
-      status: 'pending_decrease' as IOUStatus,
-      optional_note: settleUpNote || null,
-      requester_user_id: currentUser.id
-    };
+    try {
+      const confirmedIOUs = ious.filter(
+        (iou) =>
+          iou.status === 'confirmed' &&
+          iou.description === type &&
+          ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+            (iou.from_user_id === friendId && iou.to_user_id === currentUser.id))
+      );
 
-    const { error } = await supabase.from('ious').insert([iouData]);
+      const currentBalance = confirmedIOUs.reduce((sum, iou) => {
+        if (iou.from_user_id === currentUser.id) {
+          return sum - iou.amount;
+        } else {
+          return sum + iou.amount;
+        }
+      }, 0);
 
-    if (error) {
-      console.error('Error creating pending decrease:', error);
-      alert('Failed to settle up');
-    } else {
+      if (currentBalance >= 0) {
+        alert('Balance has changed. You no longer owe them anything.');
+        setSettleUpModal(null);
+        await loadIOUs();
+        return;
+      }
+
+      const actualSettleAmount = Math.min(settleUpAmount, Math.abs(currentBalance));
+
+      const iouData = {
+        from_user_id: currentUser.id,
+        to_user_id: friendId,
+        description: type,
+        amount: actualSettleAmount,
+        status: 'pending_decrease' as IOUStatus,
+        optional_note: settleUpNote || null,
+        requester_user_id: currentUser.id
+      };
+
+      const { error } = await supabase.from('ious').insert([iouData]);
+
+      if (error) throw error;
+
       await loadIOUs();
       setSettleUpModal(null);
       setSettleUpAmount(1);
       setSettleUpNote('');
+    } catch (error) {
+      console.error('Error creating settle up request:', error);
+      alert('Failed to send settle up request. Please try again.');
     }
   };
 
@@ -777,18 +828,12 @@ export default function IOUDashboard() {
                                 </span>
                               </div>
                               <div className="flex gap-2 mt-2">
-                                {isRequester ? (
-                                  <button
-                                    onClick={() => handleCancelPending(iou.id)}
-                                    className="flex-1 bg-red-500 hover:bg-red-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors"
-                                  >
-                                    Delete Request
-                                  </button>
-                                ) : (
-                                  <div className="flex-1 text-center text-sm text-gray-600 py-1.5">
-                                    Waiting for requester to withdraw
-                                  </div>
-                                )}
+                                <button
+                                  onClick={() => handleCancelPending(iou.id)}
+                                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-1.5 px-3 rounded text-sm font-medium transition-colors"
+                                >
+                                  Delete
+                                </button>
                               </div>
                             </div>
                           );
