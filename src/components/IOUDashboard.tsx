@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase, type IOU, type Profile } from '../lib/supabase';
+import { supabase, type IOU, type Profile, type IOUType, type Friendship } from '../lib/supabase';
 import { Beer, Plus, Minus, LogOut, Users } from 'lucide-react';
 
 type IOUWithProfiles = IOU & {
@@ -13,36 +13,55 @@ type IOUSummary = {
   netAmount: number;
 };
 
+const IOU_TYPES: IOUType[] = ['Coffee', 'Beer', 'Meal', 'Walk', 'Ride'];
+
 export default function IOUDashboard() {
   const [currentUser, setCurrentUser] = useState<Profile | null>(null);
   const [ious, setIous] = useState<IOUWithProfiles[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [friends, setFriends] = useState<Profile[]>([]);
   const [selectedUser, setSelectedUser] = useState('');
-  const [description, setDescription] = useState('');
+  const [description, setDescription] = useState<IOUType>('Coffee');
   const [amount, setAmount] = useState(1);
   const [direction, setDirection] = useState<'owe' | 'owed'>('owe');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadUserData();
-    loadProfiles();
-    loadIOUs();
-
-    const channel = supabase
-      .channel('ious-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'ious' },
-        () => {
-          loadIOUs();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadFriends();
+      loadIOUs();
+
+      const iousChannel = supabase
+        .channel('ious-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'ious' },
+          () => {
+            loadIOUs();
+          }
+        )
+        .subscribe();
+
+      const friendshipsChannel = supabase
+        .channel('friendships-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'friendships' },
+          () => {
+            loadFriends();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(iousChannel);
+        supabase.removeChannel(friendshipsChannel);
+      };
+    }
+  }, [currentUser]);
 
   const loadUserData = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -57,13 +76,28 @@ export default function IOUDashboard() {
     }
   };
 
-  const loadProfiles = async () => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('username');
+  const loadFriends = async () => {
+    if (!currentUser) return;
 
-    setProfiles(data || []);
+    const { data } = await supabase
+      .from('friendships')
+      .select(`
+        *,
+        requester_profile:profiles!friendships_requester_id_fkey(*),
+        addressee_profile:profiles!friendships_addressee_id_fkey(*)
+      `)
+      .eq('status', 'accepted');
+
+    const friendshipsData = data as (Friendship & {
+      requester_profile: Profile;
+      addressee_profile: Profile;
+    })[] || [];
+
+    const friendProfiles = friendshipsData.map(f =>
+      f.requester_id === currentUser.id ? f.addressee_profile : f.requester_profile
+    );
+
+    setFriends(friendProfiles);
   };
 
   const loadIOUs = async () => {
@@ -92,11 +126,16 @@ export default function IOUDashboard() {
         amount,
       };
 
-      await supabase.from('ious').insert([iouData]);
+      const { error } = await supabase.from('ious').insert([iouData]);
 
-      setSelectedUser('');
-      setDescription('');
-      setAmount(1);
+      if (error) {
+        console.error('Error adding IOU:', error);
+        alert('Failed to add IOU. Make sure you are friends with this user.');
+      } else {
+        setSelectedUser('');
+        setDescription('Coffee');
+        setAmount(1);
+      }
     } catch (err) {
       console.error('Error adding IOU:', err);
     } finally {
@@ -149,12 +188,9 @@ export default function IOUDashboard() {
   };
 
   const summary = calculateSummary();
-  const otherProfiles = profiles.filter((p) => p.id !== currentUser?.id);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100">
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-3">
@@ -247,21 +283,28 @@ export default function IOUDashboard() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Select friend...</option>
-                    {otherProfiles.map((profile) => (
+                    {friends.map((profile) => (
                       <option key={profile.id} value={profile.id}>
                         {profile.username}
                       </option>
                     ))}
                   </select>
 
-                  <input
-                    type="text"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    required
-                    placeholder="What? (e.g., beer, ride, lunch)"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">What?</label>
+                    <select
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value as IOUType)}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {IOU_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
                   <input
                     type="number"
@@ -354,8 +397,6 @@ export default function IOUDashboard() {
               )}
             </div>
           </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -11,12 +11,25 @@ export type Profile = {
   created_at: string;
 };
 
+export type IOUType = 'Coffee' | 'Beer' | 'Meal' | 'Walk' | 'Ride';
+
 export type IOU = {
   id: string;
   from_user_id: string;
   to_user_id: string;
-  description: string;
+  description: IOUType;
   amount: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FriendshipStatus = 'pending' | 'accepted' | 'rejected';
+
+export type Friendship = {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: FriendshipStatus;
   created_at: string;
   updated_at: string;
 };
