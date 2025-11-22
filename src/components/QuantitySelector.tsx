@@ -30,11 +30,23 @@ export default function QuantitySelector({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = parseInt(e.target.value);
+    const inputValue = e.target.value;
+
+    if (inputValue === '') {
+      return;
+    }
+
+    const newValue = parseInt(inputValue);
     if (!isNaN(newValue) && newValue >= min && newValue <= max) {
       onChange(newValue);
-    } else if (e.target.value === '') {
+    }
+  };
+
+  const handleInputBlur = () => {
+    if (value < min) {
       onChange(min);
+    } else if (value > max) {
+      onChange(max);
     }
   };
 
@@ -56,12 +68,12 @@ export default function QuantitySelector({
             <Minus className="w-5 h-5" />
           </button>
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={value}
             onChange={handleInputChange}
-            min={min}
-            max={max}
-            className="w-16 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            onBlur={handleInputBlur}
+            className="w-16 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
           <button
             type="button"
