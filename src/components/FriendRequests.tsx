@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, type Friendship, type Profile } from '../lib/supabase';
-import { UserPlus, Check, X, Users } from 'lucide-react';
+import { UserPlus, Check, X, Users, MoreVertical } from 'lucide-react';
 
 type FriendshipWithProfile = Friendship & {
   requester_profile?: Profile;
@@ -15,6 +15,7 @@ export default function FriendRequests() {
   const [searchUsername, setSearchUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     loadUserData();
@@ -197,7 +198,12 @@ export default function FriendRequests() {
       .delete()
       .eq('id', friendshipId);
     await loadFriendships();
+    setOpenMenuId(null);
     showMessage('success', 'Friend removed');
+  };
+
+  const toggleMenu = (friendshipId: string) => {
+    setOpenMenuId(openMenuId === friendshipId ? null : friendshipId);
   };
 
   return (
@@ -317,17 +323,29 @@ export default function FriendRequests() {
               return (
                 <div
                   key={friendship.id}
-                  className="bg-white rounded-lg p-4 shadow-sm flex justify-between items-center"
+                  className="bg-white rounded-lg p-4 shadow-sm flex justify-between items-center relative"
                 >
                   <span className="font-medium text-gray-700">
                     {friendProfile?.username}
                   </span>
-                  <button
-                    onClick={() => handleRemoveFriend(friendship.id)}
-                    className="text-red-600 hover:text-red-700 text-sm font-medium"
-                  >
-                    Remove
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={() => toggleMenu(friendship.id)}
+                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      <MoreVertical className="w-5 h-5 text-gray-600" />
+                    </button>
+                    {openMenuId === friendship.id && (
+                      <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
+                        <button
+                          onClick={() => handleRemoveFriend(friendship.id)}
+                          className="w-full text-left px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          Remove Friend
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}

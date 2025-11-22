@@ -7,9 +7,8 @@ type AuthFormProps = {
 
 export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,6 +19,18 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
 
     try {
       if (isSignUp) {
+        const email = `${username.toLowerCase().trim()}@iou.app`;
+
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('username', username.trim())
+          .maybeSingle();
+
+        if (existingProfile) {
+          throw new Error('Username already taken');
+        }
+
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -30,11 +41,23 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
         if (authData.user) {
           const { error: profileError } = await supabase
             .from('profiles')
-            .insert([{ id: authData.user.id, username }]);
+            .insert([{ id: authData.user.id, username: username.trim() }]);
 
           if (profileError) throw profileError;
         }
       } else {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('username', username.trim())
+          .maybeSingle();
+
+        if (!profile) {
+          throw new Error('Invalid username or password');
+        }
+
+        const email = `${username.toLowerCase().trim()}@iou.app`;
+
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -58,33 +81,17 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
       </h2>
 
       <form onSubmit={handleAuth} className="space-y-4">
-        {isSignUp && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Username
-            </label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="johndoe"
-            />
-          </div>
-        )}
-
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email
+            Username
           </label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="you@example.com"
+            placeholder="johndoe"
           />
         </div>
 
