@@ -34,7 +34,8 @@ export default function IOUDashboard() {
   const [amount, setAmount] = useState(1);
   const [direction, setDirection] = useState<'owe' | 'owed'>('owe');
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'settled'>('all');
+  const [filter, setFilter] = useState<'confirmed' | 'pending' | 'settled'>('confirmed');
+  const [friendFilter, setFriendFilter] = useState<string>('all');
   const [generousDecreaseModal, setGenerousDecreaseModal] = useState<{ friendId: string; type: IOUType; maxAmount: number } | null>(null);
   const [generousDecreaseAmount, setGenerousDecreaseAmount] = useState(1);
   const [generousDecreaseNote, setGenerousDecreaseNote] = useState('');
@@ -647,14 +648,14 @@ export default function IOUDashboard() {
 
             <div className="mb-4 flex gap-2">
               <button
-                onClick={() => setFilter('all')}
+                onClick={() => setFilter('confirmed')}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  filter === 'all'
+                  filter === 'confirmed'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                All
+                Confirmed IOUs
               </button>
               <button
                 onClick={() => setFilter('pending')}
@@ -669,16 +670,28 @@ export default function IOUDashboard() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-6 mb-8">
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200 flex flex-col">
-                <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <Users className="w-5 h-5" />
-                  Summary
-                </h2>
+              <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl p-6 border border-orange-300 flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Summary
+                  </h2>
+                  <select
+                    value={friendFilter}
+                    onChange={(e) => setFriendFilter(e.target.value)}
+                    className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  >
+                    <option value="all">All Friends</option>
+                    {summary.map(s => (
+                      <option key={s.userId} value={s.userId}>{s.username}</option>
+                    ))}
+                  </select>
+                </div>
                 {summary.length === 0 && pendingIOUs.length === 0 && disputedIOUs.length === 0 ? (
                   <p className="text-gray-500 text-sm">No IOUs yet</p>
                 ) : (
                   <div className="space-y-4 overflow-y-auto max-h-96 pr-2">
-                    {(filter === 'all' || filter === 'pending') && getNewPendingIOUs().length > 0 && (
+                    {filter === 'pending' && getNewPendingIOUs().length > 0 && (
                       <div className="mb-4">
                         <h3 className="text-sm font-bold text-blue-700 mb-2 flex items-center gap-1">
                           <Clock className="w-4 h-4" />
@@ -740,7 +753,7 @@ export default function IOUDashboard() {
                       </div>
                     )}
 
-                    {(filter === 'all' || filter === 'pending') && getPendingDecreaseIOUs().length > 0 && (
+                    {filter === 'pending' && getPendingDecreaseIOUs().length > 0 && (
                       <div className="mb-4">
                         <h3 className="text-sm font-bold text-amber-700 mb-2 flex items-center gap-1">
                           <Clock className="w-4 h-4" />
@@ -801,7 +814,7 @@ export default function IOUDashboard() {
                       </div>
                     )}
 
-                    {(filter === 'all' || filter === 'pending') && disputedIOUs.length > 0 && (
+                    {filter === 'pending' && disputedIOUs.length > 0 && (
                       <div className="mb-4">
                         <h3 className="text-sm font-bold text-red-700 mb-2 flex items-center gap-1">
                           <AlertCircle className="w-4 h-4" />
@@ -841,8 +854,10 @@ export default function IOUDashboard() {
                       </div>
                     )}
 
-                    {(filter === 'all' || filter === 'settled') && summary.map((s) => (
-                      <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-l-green-400">
+                    {(filter === 'confirmed' || filter === 'settled') && summary
+                      .filter(s => friendFilter === 'all' || s.userId === friendFilter)
+                      .map((s) => (
+                      <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-l-orange-500">
                         <div className="flex justify-between items-center mb-3">
                           <div className="font-semibold text-gray-800">{s.username}</div>
                         </div>
