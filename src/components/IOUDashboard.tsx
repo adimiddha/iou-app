@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase, type IOU, type Profile, type IOUType, type IOUStatus, type Friendship } from '../lib/supabase';
 import { Beer, Plus, Minus, LogOut, Users, Check, Clock, AlertCircle, X } from 'lucide-react';
+import QuantitySelector from './QuantitySelector';
 
 type IOUWithProfiles = IOU & {
   from_profile: Profile;
@@ -41,9 +42,11 @@ export default function IOUDashboard() {
   const [generousDecreaseNote, setGenerousDecreaseNote] = useState('');
 
   const [selfishIncreaseModal, setSelfishIncreaseModal] = useState<{ friendId: string; type: IOUType } | null>(null);
+  const [selfishIncreaseAmount, setSelfishIncreaseAmount] = useState(1);
   const [selfishIncreaseNote, setSelfishIncreaseNote] = useState('');
 
   const [generousIncreaseModal, setGenerousIncreaseModal] = useState<{ friendId: string; type: IOUType } | null>(null);
+  const [generousIncreaseAmount, setGenerousIncreaseAmount] = useState(1);
   const [generousIncreaseNote, setGenerousIncreaseNote] = useState('');
 
   const [settleUpModal, setSettleUpModal] = useState<{ friendId: string; type: IOUType; maxAmount: number } | null>(null);
@@ -286,7 +289,7 @@ export default function IOUDashboard() {
         from_user_id: friendId,
         to_user_id: currentUser.id,
         description: type,
-        amount: 1,
+        amount: selfishIncreaseAmount,
         status: 'pending' as IOUStatus,
         optional_note: selfishIncreaseNote || null,
         requester_user_id: currentUser.id
@@ -298,6 +301,7 @@ export default function IOUDashboard() {
 
       await loadIOUs();
       setSelfishIncreaseModal(null);
+      setSelfishIncreaseAmount(1);
       setSelfishIncreaseNote('');
     } catch (error) {
       console.error('Error creating pending increase:', error);
@@ -327,7 +331,7 @@ export default function IOUDashboard() {
         }
       }, 0);
 
-      const newBalance = currentBalance - 1;
+      const newBalance = currentBalance - generousIncreaseAmount;
 
       const { error: deleteError } = await supabase.from('ious').delete().or(
         `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
@@ -359,6 +363,7 @@ export default function IOUDashboard() {
 
       await loadIOUs();
       setGenerousIncreaseModal(null);
+      setGenerousIncreaseAmount(1);
       setGenerousIncreaseNote('');
     } catch (error) {
       console.error('Error adding to your IOU:', error);
@@ -904,6 +909,7 @@ export default function IOUDashboard() {
                                         <button
                                           onClick={() => {
                                             setSelfishIncreaseModal({ friendId: s.userId, type });
+                                            setSelfishIncreaseAmount(1);
                                           }}
                                           className="flex-1 flex items-center justify-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-medium transition-colors"
                                           title="Sends request for approval"
@@ -928,6 +934,7 @@ export default function IOUDashboard() {
                                         <button
                                           onClick={() => {
                                             setGenerousIncreaseModal({ friendId: s.userId, type });
+                                            setGenerousIncreaseAmount(1);
                                           }}
                                           className="flex-1 flex items-center justify-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 px-2 rounded text-xs font-medium transition-colors"
                                           title="Instant - no approval needed"
@@ -1006,15 +1013,15 @@ export default function IOUDashboard() {
                     </select>
                   </div>
 
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(parseInt(e.target.value) || 1)}
-                    min="1"
-                    required
-                    placeholder="Amount"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">How many?</label>
+                    <QuantitySelector
+                      value={amount}
+                      onChange={setAmount}
+                      min={1}
+                      max={10}
+                    />
+                  </div>
 
                   <button
                     type="submit"
@@ -1089,9 +1096,16 @@ export default function IOUDashboard() {
           {selfishIncreaseModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Add More</h3>
-                <p className="text-sm text-gray-600 mb-4">Request to add 1 more {selfishIncreaseModal.type} to what they owe you. They must approve.</p>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Add More {selfishIncreaseModal.type}</h3>
+                <p className="text-sm text-gray-600 mb-4">Request to add more {selfishIncreaseModal.type} to what they owe you. They must approve.</p>
                 <div className="space-y-4">
+                  <QuantitySelector
+                    value={selfishIncreaseAmount}
+                    onChange={setSelfishIncreaseAmount}
+                    min={1}
+                    max={10}
+                    label="How many?"
+                  />
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Note (Required)
@@ -1109,6 +1123,7 @@ export default function IOUDashboard() {
                     <button
                       onClick={() => {
                         setSelfishIncreaseModal(null);
+                        setSelfishIncreaseAmount(1);
                         setSelfishIncreaseNote('');
                       }}
                       className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
@@ -1131,9 +1146,16 @@ export default function IOUDashboard() {
           {generousIncreaseModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Add {generousIncreaseModal.type} to My IOU</h3>
-                <p className="text-sm text-gray-600 mb-4">This will instantly add 1 {generousIncreaseModal.type} to what you owe them. No approval needed.</p>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Add {generousIncreaseModal.type}</h3>
+                <p className="text-sm text-gray-600 mb-4">This will instantly add {generousIncreaseModal.type} to what you owe them. No approval needed.</p>
                 <div className="space-y-4">
+                  <QuantitySelector
+                    value={generousIncreaseAmount}
+                    onChange={setGenerousIncreaseAmount}
+                    min={1}
+                    max={10}
+                    label="How many?"
+                  />
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Optional Note
@@ -1150,6 +1172,7 @@ export default function IOUDashboard() {
                     <button
                       onClick={() => {
                         setGenerousIncreaseModal(null);
+                        setGenerousIncreaseAmount(1);
                         setGenerousIncreaseNote('');
                       }}
                       className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded-lg font-medium transition-colors"
