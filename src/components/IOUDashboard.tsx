@@ -870,7 +870,7 @@ export default function IOUDashboard() {
                                 <div
                                   key={type}
                                   className={`rounded-lg border-l-4 ${
-                                    isOwed ? 'border-green-400 bg-green-50' : 'border-red-400 bg-red-50'
+                                    isOwed ? 'border-green-400 bg-green-50' : 'border-red-600 bg-red-100'
                                   }`}
                                 >
                                   <div className="flex justify-between items-center p-2">
