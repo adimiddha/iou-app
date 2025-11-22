@@ -1131,7 +1131,7 @@ export default function IOUDashboard() {
           {generousIncreaseModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">Add to My IOU</h3>
+                <h3 className="text-xl font-bold text-gray-800 mb-4">Add {generousIncreaseModal.type} to My IOU</h3>
                 <p className="text-sm text-gray-600 mb-4">This will instantly add 1 {generousIncreaseModal.type} to what you owe them. No approval needed.</p>
                 <div className="space-y-4">
                   <div>
