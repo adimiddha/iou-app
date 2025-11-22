@@ -887,7 +887,7 @@ export default function IOUDashboard() {
                                       {isOwed ? amount : -Math.abs(amount)}
                                     </span>
                                   </div>
-                                  <div className="border-t border-gray-200 px-2 py-1.5 flex gap-2 justify-end bg-white bg-opacity-50">
+                                  <div className="border-t border-gray-200 px-2 py-1.5 flex gap-2 bg-white bg-opacity-50">
                                     {isOwed ? (
                                       <>
                                         <button
@@ -895,7 +895,7 @@ export default function IOUDashboard() {
                                             setGenerousDecreaseModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
                                             setGenerousDecreaseAmount(Math.min(1, Math.abs(amount)));
                                           }}
-                                          className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          className="flex-1 flex items-center justify-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 px-2 rounded text-xs font-medium transition-colors"
                                           title="Instant - no approval needed"
                                         >
                                           <Minus className="w-3 h-3" />
@@ -905,7 +905,7 @@ export default function IOUDashboard() {
                                           onClick={() => {
                                             setSelfishIncreaseModal({ friendId: s.userId, type });
                                           }}
-                                          className="flex items-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          className="flex-1 flex items-center justify-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-medium transition-colors"
                                           title="Sends request for approval"
                                         >
                                           <Plus className="w-3 h-3" />
@@ -919,7 +919,7 @@ export default function IOUDashboard() {
                                             setSettleUpModal({ friendId: s.userId, type, maxAmount: Math.abs(amount) });
                                             setSettleUpAmount(Math.min(1, Math.abs(amount)));
                                           }}
-                                          className="flex items-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          className="flex-1 flex items-center justify-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 py-1 px-2 rounded text-xs font-medium transition-colors"
                                           title="Sends request for approval"
                                         >
                                           <Check className="w-3 h-3" />
@@ -929,7 +929,7 @@ export default function IOUDashboard() {
                                           onClick={() => {
                                             setGenerousIncreaseModal({ friendId: s.userId, type });
                                           }}
-                                          className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 px-2 rounded text-xs font-medium transition-colors"
+                                          className="flex-1 flex items-center justify-center gap-1 bg-green-100 hover:bg-green-200 text-green-700 py-1 px-2 rounded text-xs font-medium transition-colors"
                                           title="Instant - no approval needed"
                                         >
                                           <Plus className="w-3 h-3" />
