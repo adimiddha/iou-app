@@ -1,4 +1,5 @@
 import { Plus, Minus } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 interface QuantitySelectorProps {
   value: number;
@@ -17,6 +18,12 @@ export default function QuantitySelector({
   label,
   className = ''
 }: QuantitySelectorProps) {
+  const [inputValue, setInputValue] = useState(String(value));
+
+  useEffect(() => {
+    setInputValue(String(value));
+  }, [value]);
+
   const handleDecrement = () => {
     if (value > min) {
       onChange(value - 1);
@@ -30,23 +37,33 @@ export default function QuantitySelector({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputValue = e.target.value;
+    const newInputValue = e.target.value;
 
-    if (inputValue === '') {
-      return;
-    }
+    if (newInputValue === '' || /^\d*$/.test(newInputValue)) {
+      setInputValue(newInputValue);
 
-    const newValue = parseInt(inputValue);
-    if (!isNaN(newValue) && newValue >= min && newValue <= max) {
-      onChange(newValue);
+      if (newInputValue !== '') {
+        const numValue = parseInt(newInputValue);
+        if (!isNaN(numValue) && numValue >= min && numValue <= max) {
+          onChange(numValue);
+        }
+      }
     }
   };
 
   const handleInputBlur = () => {
-    if (value < min) {
+    if (inputValue === '' || isNaN(parseInt(inputValue))) {
+      setInputValue(String(min));
       onChange(min);
-    } else if (value > max) {
-      onChange(max);
+    } else {
+      const numValue = parseInt(inputValue);
+      if (numValue < min) {
+        setInputValue(String(min));
+        onChange(min);
+      } else if (numValue > max) {
+        setInputValue(String(max));
+        onChange(max);
+      }
     }
   };
 
@@ -70,7 +87,7 @@ export default function QuantitySelector({
           <input
             type="text"
             inputMode="numeric"
-            value={value}
+            value={inputValue}
             onChange={handleInputChange}
             onBlur={handleInputBlur}
             className="w-16 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
