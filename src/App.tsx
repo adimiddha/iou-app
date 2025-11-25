@@ -19,6 +19,8 @@ function App() {
         const hasProfile = await checkUserProfile(session.user.id);
         if (!hasProfile) {
           setNeedsUsername(true);
+        } else {
+          setNeedsUsername(false);
         }
       }
       setSession(session);
@@ -27,15 +29,25 @@ function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
+        console.log('Auth state changed:', event, session?.user?.email);
+
         if (session) {
           const hasProfile = await checkUserProfile(session.user.id);
+          console.log('Has profile:', hasProfile);
+
           if (!hasProfile) {
             setNeedsUsername(true);
+          } else {
+            setNeedsUsername(false);
           }
+        } else {
+          setNeedsUsername(false);
         }
+
         setSession(session);
+        setLoading(false);
       })();
     });
 
