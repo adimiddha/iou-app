@@ -14,15 +14,27 @@ function App() {
   const [submittingUsername, setSubmittingUsername] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    console.log('App mounted, checking initial session...');
+
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      console.log('Initial session check:', { session: session?.user?.email, error });
+
       if (session) {
+        console.log('Session found, checking profile for user:', session.user.id);
         const hasProfile = await checkUserProfile(session.user.id);
+        console.log('Profile check result:', hasProfile);
+
         if (!hasProfile) {
+          console.log('No profile found, prompting for username');
           setNeedsUsername(true);
         } else {
+          console.log('Profile exists, allowing access to app');
           setNeedsUsername(false);
         }
+      } else {
+        console.log('No session found');
       }
+
       setSession(session);
       setLoading(false);
     });
@@ -31,18 +43,25 @@ function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       (async () => {
-        console.log('Auth state changed:', event, session?.user?.email);
+        console.log('========================================');
+        console.log('Auth state change event:', event);
+        console.log('Session:', session?.user?.email);
+        console.log('========================================');
 
         if (session) {
+          console.log('Session detected in state change, checking profile...');
           const hasProfile = await checkUserProfile(session.user.id);
-          console.log('Has profile:', hasProfile);
+          console.log('Profile exists:', hasProfile);
 
           if (!hasProfile) {
+            console.log('Setting needsUsername to true');
             setNeedsUsername(true);
           } else {
+            console.log('Setting needsUsername to false');
             setNeedsUsername(false);
           }
         } else {
+          console.log('No session in state change');
           setNeedsUsername(false);
         }
 
@@ -55,11 +74,14 @@ function App() {
   }, []);
 
   const checkUserProfile = async (userId: string) => {
-    const { data } = await supabase
+    console.log('Checking profile for user:', userId);
+    const { data, error } = await supabase
       .from('profiles')
       .select('id')
       .eq('id', userId)
       .maybeSingle();
+
+    console.log('Profile query result:', { data, error });
     return !!data;
   };
 
