@@ -60,7 +60,11 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
 
@@ -76,6 +80,12 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
       <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">
         {isSignUp ? 'Sign Up' : 'Sign In'}
       </h2>
+
+      {isSignUp && (
+        <p className="text-sm text-gray-600 mb-4 text-center">
+          Sign up creates a new account. Use sign in if you already have one.
+        </p>
+      )}
 
       <button
         onClick={handleGoogleAuth}
