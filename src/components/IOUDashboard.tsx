@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, type IOU, type Profile, type IOUType, type IOUStatus, type Friendship } from '../lib/supabase';
 import { Beer, Plus, Minus, LogOut, Users, Check, Clock, AlertCircle, X } from 'lucide-react';
 import QuantitySelector from './QuantitySelector';
+import NotificationBell from './NotificationBell';
 
 type IOUWithProfiles = IOU & {
   from_profile: Profile;
@@ -141,6 +142,24 @@ export default function IOUDashboard() {
     setIous(data as IOUWithProfiles[] || []);
   };
 
+  const createNotification = async (
+    userId: string,
+    type: string,
+    title: string,
+    message: string,
+    relatedUserId?: string,
+    relatedIouId?: string
+  ) => {
+    await supabase.from('notifications').insert([{
+      user_id: userId,
+      type,
+      title,
+      message,
+      related_user_id: relatedUserId,
+      related_iou_id: relatedIouId
+    }]);
+  };
+
   const handleAddIOU = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !selectedUser || !description) return;
@@ -162,6 +181,16 @@ export default function IOUDashboard() {
         console.error('Error adding IOU:', error);
         alert('Failed to add IOU. Make sure you are friends with this user.');
       } else {
+        if (direction === 'owed') {
+          await createNotification(
+            selectedUser,
+            'iou_received',
+            'New IOU Request',
+            `${currentUser.username} says you owe them ${amount} ${description}`,
+            currentUser.id
+          );
+        }
+
         await loadIOUs();
         setSelectedUser('');
         setDescription('Coffee');
@@ -268,6 +297,20 @@ export default function IOUDashboard() {
         if (insertError) throw insertError;
       }
 
+      const forgivenAmount = actualDecreaseAmount;
+      const wasFullyForgiven = newBalance === 0;
+      const notificationMessage = wasFullyForgiven
+        ? `${currentUser.username} forgave all ${forgivenAmount} ${type}${generousDecreaseNote ? `. Note: "${generousDecreaseNote}"` : ''}`
+        : `${currentUser.username} forgave ${forgivenAmount} ${type}. You still owe ${newBalance}${generousDecreaseNote ? `. Note: "${generousDecreaseNote}"` : ''}`;
+
+      await createNotification(
+        friendId,
+        'iou_forgiven',
+        wasFullyForgiven ? 'Debt Forgiven!' : 'Debt Partially Forgiven',
+        notificationMessage,
+        currentUser.id
+      );
+
       await loadIOUs();
       setGenerousDecreaseModal(null);
       setGenerousDecreaseAmount(1);
@@ -298,6 +341,14 @@ export default function IOUDashboard() {
       const { error } = await supabase.from('ious').insert([iouData]);
 
       if (error) throw error;
+
+      await createNotification(
+        friendId,
+        'iou_added',
+        'IOU Request',
+        `${currentUser.username} says you owe ${selfishIncreaseAmount} more ${type}. "${selfishIncreaseNote}"`,
+        currentUser.id
+      );
 
       await loadIOUs();
       setSelfishIncreaseModal(null);
@@ -487,6 +538,17 @@ export default function IOUDashboard() {
       }]);
     }
 
+    if (pendingIOU.status === 'pending_decrease') {
+      const settlerUserId = pendingIOU.from_user_id;
+      await createNotification(
+        settlerUserId,
+        'iou_settled',
+        'Payment Confirmed!',
+        `${currentUser.username} confirmed your payment of ${decreaseAmount} ${iouType}`,
+        currentUser.id
+      );
+    }
+
     await loadIOUs();
   };
 
@@ -530,6 +592,20 @@ export default function IOUDashboard() {
   };
 
   const handleDeclineNewIOU = async (iouId: string) => {
+    const iou = ious.find(i => i.id === iouId);
+    if (!iou || !currentUser) return;
+
+    const otherUserId = iou.from_user_id === currentUser.id ? iou.to_user_id : iou.from_user_id;
+    const otherUser = iou.from_user_id === currentUser.id ? iou.to_profile : iou.from_profile;
+
+    await createNotification(
+      otherUserId,
+      'iou_declined',
+      'IOU Declined',
+      `${currentUser.username} declined your ${iou.description} IOU for ${iou.amount}`,
+      currentUser.id
+    );
+
     const { error } = await supabase
       .from('ious')
       .delete()
@@ -607,9 +683,32 @@ export default function IOUDashboard() {
     return getPendingIOUs().filter(iou => iou.requester_user_id !== currentUser?.id).length;
   };
 
+  const getPendingFriendsList = () => {
+    if (!currentUser) return [];
+
+    const friendsMap = new Map<string, { userId: string; username: string }>();
+
+    pendingIOUs.forEach(iou => {
+      if (iou.from_user_id === currentUser.id) {
+        friendsMap.set(iou.to_user_id, {
+          userId: iou.to_user_id,
+          username: iou.to_profile.username
+        });
+      } else if (iou.to_user_id === currentUser.id) {
+        friendsMap.set(iou.from_user_id, {
+          userId: iou.from_user_id,
+          username: iou.from_profile.username
+        });
+      }
+    });
+
+    return Array.from(friendsMap.values());
+  };
+
   const summary = calculateSummary();
   const pendingIOUs = getPendingIOUs();
   const disputedIOUs = getDisputedIOUs();
+  const pendingFriendsList = getPendingFriendsList();
 
   return (
     <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -623,6 +722,7 @@ export default function IOUDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
+                <NotificationBell />
                 <span className="text-white font-medium">
                   {currentUser?.username}
                 </span>
@@ -687,9 +787,14 @@ export default function IOUDashboard() {
                     className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   >
                     <option value="all">All Friends</option>
-                    {summary.map(s => (
-                      <option key={s.userId} value={s.userId}>{s.username}</option>
-                    ))}
+                    {filter === 'confirmed'
+                      ? summary.map(s => (
+                          <option key={s.userId} value={s.userId}>{s.username}</option>
+                        ))
+                      : pendingFriendsList.map(f => (
+                          <option key={f.userId} value={f.userId}>{f.username}</option>
+                        ))
+                    }
                   </select>
                 </div>
                 {summary.length === 0 && pendingIOUs.length === 0 && disputedIOUs.length === 0 ? (
@@ -702,7 +807,13 @@ export default function IOUDashboard() {
                           <Clock className="w-4 h-4" />
                           New IOUs Awaiting Acceptance
                         </h3>
-                        {getNewPendingIOUs().map((iou) => {
+                        {getNewPendingIOUs()
+                          .filter(iou => {
+                            if (friendFilter === 'all') return true;
+                            const otherUserId = iou.from_user_id === currentUser?.id ? iou.to_user_id : iou.from_user_id;
+                            return otherUserId === friendFilter;
+                          })
+                          .map((iou) => {
                           const isRequester = iou.requester_user_id === currentUser?.id;
                           const otherUser = iou.from_user_id === currentUser?.id ? iou.to_profile : iou.from_profile;
                           const isPayer = iou.from_user_id === currentUser?.id;
@@ -764,7 +875,13 @@ export default function IOUDashboard() {
                           <Clock className="w-4 h-4" />
                           Payment Confirmations
                         </h3>
-                        {getPendingDecreaseIOUs().map((iou) => {
+                        {getPendingDecreaseIOUs()
+                          .filter(iou => {
+                            if (friendFilter === 'all') return true;
+                            const otherUserId = iou.from_user_id === currentUser?.id ? iou.to_user_id : iou.from_user_id;
+                            return otherUserId === friendFilter;
+                          })
+                          .map((iou) => {
                           const isRequester = iou.requester_user_id === currentUser?.id;
                           const otherUser = iou.from_user_id === currentUser?.id ? iou.to_profile : iou.from_profile;
                           return (
@@ -825,7 +942,13 @@ export default function IOUDashboard() {
                           <AlertCircle className="w-4 h-4" />
                           Disputed Items
                         </h3>
-                        {disputedIOUs.map((iou) => {
+                        {disputedIOUs
+                          .filter(iou => {
+                            if (friendFilter === 'all') return true;
+                            const otherUserId = iou.from_user_id === currentUser?.id ? iou.to_user_id : iou.from_user_id;
+                            return otherUserId === friendFilter;
+                          })
+                          .map((iou) => {
                           const isRequester = iou.requester_user_id === currentUser?.id;
                           const otherUser = iou.from_user_id === currentUser?.id ? iou.to_profile : iou.from_profile;
                           return (

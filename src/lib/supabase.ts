@@ -19,7 +19,7 @@ export type Profile = {
 
 export type IOUType = 'Coffee' | 'Beer' | 'Meal' | 'Walk' | 'Ride' | 'Pizza';
 
-export type IOUStatus = 'confirmed' | 'pending_decrease' | 'disputed';
+export type IOUStatus = 'pending' | 'confirmed' | 'pending_decrease' | 'disputed';
 
 export type IOU = {
   id: string;
@@ -43,4 +43,24 @@ export type Friendship = {
   status: FriendshipStatus;
   created_at: string;
   updated_at: string;
+};
+
+export type NotificationType =
+  | 'friend_request'
+  | 'iou_received'
+  | 'iou_forgiven'
+  | 'iou_added'
+  | 'iou_settled'
+  | 'iou_declined';
+
+export type Notification = {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  related_user_id?: string;
+  related_iou_id?: string;
+  is_read: boolean;
+  created_at: string;
 };

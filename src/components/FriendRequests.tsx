@@ -55,6 +55,22 @@ export default function FriendRequests() {
     }
   };
 
+  const createNotification = async (
+    userId: string,
+    type: string,
+    title: string,
+    message: string,
+    relatedUserId?: string
+  ) => {
+    await supabase.from('notifications').insert([{
+      user_id: userId,
+      type,
+      title,
+      message,
+      related_user_id: relatedUserId
+    }]);
+  };
+
   const loadFriendships = async () => {
     if (!currentUser) return;
 
@@ -152,6 +168,14 @@ export default function FriendRequests() {
           showMessage('error', 'Failed to send friend request');
         }
       } else {
+        await createNotification(
+          targetUser.id,
+          'friend_request',
+          'New Friend Request',
+          `${currentUser.username} sent you a friend request`,
+          currentUser.id
+        );
+
         await loadFriendships();
         showMessage('success', 'Friend request sent!');
         setSearchUsername('');
