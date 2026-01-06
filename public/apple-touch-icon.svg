@@ -1,0 +1,10 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="180" height="180" fill="#f59e0b"/>
+  <g transform="translate(45, 37)">
+    <path d="M75 30h7.5a22.5 22.5 0 0 1 0 45h-7.5" stroke="white" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M30 37.5v45" stroke="white" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M45 37.5v45" stroke="white" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M48.75 18.75c-7.5 0-10.5 3.75-22.5 3.75s-15-3.75-22.5-3.75-17.25 3.75-22.5 3.75a18.75 18.75 0 0 1 0-37.5c5.85 0 11.775 3.75 18.75 3.75s11.55-3.75 18.75-3.75 15 11.25 22.5 11.25 12.9-3.75 18.75-3.75a18.75 18.75 0 0 1 0 37.5c-5.85 0-11.25-3.75-18.75-3.75Z" stroke="white" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" fill="none" transform="translate(3.75, 0)"/>
+    <path d="M7.5 30v90a15 15 0 0 0 15 15h45a15 15 0 0 0 15-15V30" stroke="white" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>
