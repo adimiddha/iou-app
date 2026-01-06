@@ -1,10 +1,20 @@
 <svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="192" height="192" rx="32" fill="#f59e0b"/>
-  <g transform="translate(48, 40)">
-    <path d="M80 32h8a24 24 0 0 1 0 48h-8" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-    <path d="M32 40v48" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M48 40v48" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M52 20c-8 0-11.2 4-24 4s-16-4-24-4S-7.76 24-16 24a20 20 0 0 1 0-40c6.24 0 12.56 4 20 4S12.32 -16 20 -16s16 12 24 12 13.76-4 20-4a20 20 0 0 1 0 40c-6.24 0-12-4-20-4Z" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none" transform="translate(4, 0)"/>
-    <path d="M8 32v96a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16V32" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <defs>
+    <linearGradient id="beerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="#1f2937"/>
+  <g transform="translate(40, 35)">
+    <path d="M20 28h72v80c0 8.837-7.163 16-16 16H36c-8.837 0-16-7.163-16-16V28z" fill="url(#beerGrad)"/>
+    <ellipse cx="56" cy="28" rx="36" ry="8" fill="#fde68a"/>
+    <path d="M20 28c0 4.418 16.118 8 36 8s36-3.582 36-8" stroke="#fbbf24" stroke-width="1" fill="none"/>
+    <rect x="18" y="32" width="4" height="76" rx="2" fill="#d97706"/>
+    <rect x="90" y="32" width="4" height="76" rx="2" fill="#d97706"/>
+    <path d="M92 48h8c6.627 0 12 5.373 12 12v8c0 6.627-5.373 12-12 12h-8" stroke="#d97706" stroke-width="4" stroke-linejoin="round" fill="none"/>
+    <ellipse cx="40" cy="22" rx="18" ry="6" fill="white" opacity="0.9"/>
+    <ellipse cx="45" cy="20" rx="12" ry="4" fill="white" opacity="0.7"/>
+    <ellipse cx="70" cy="24" rx="14" ry="5" fill="white" opacity="0.8"/>
   </g>
 </svg>
