@@ -787,7 +787,10 @@ export default function IOUDashboard() {
 
             <div className="mb-4 flex gap-2">
               <button
-                onClick={() => setFilter('confirmed')}
+                onClick={() => {
+                  setFilter('confirmed');
+                  setFriendFilter('all');
+                }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   filter === 'confirmed'
                     ? 'bg-blue-600 text-white'
@@ -797,7 +800,10 @@ export default function IOUDashboard() {
                 Confirmed IOUs
               </button>
               <button
-                onClick={() => setFilter('pending')}
+                onClick={() => {
+                  setFilter('pending');
+                  setFriendFilter('all');
+                }}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   filter === 'pending'
                     ? 'bg-amber-600 text-white'
@@ -818,7 +824,7 @@ export default function IOUDashboard() {
                   <select
                     value={friendFilter}
                     onChange={(e) => setFriendFilter(e.target.value)}
-                    className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="min-w-[10rem] text-sm font-medium px-3 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   >
                     <option value="all">All Friends</option>
                     {filter === 'confirmed'
