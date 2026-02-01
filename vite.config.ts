@@ -8,6 +8,14 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          privacy: path.resolve(__dirname, 'privacy.html'),
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

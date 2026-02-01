@@ -311,6 +311,17 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
             : "Don't have an account? Sign up"}
         </button>
       </div>
+
+      <p className="mt-6 text-center">
+        <a
+          href="/privacy.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-gray-500 hover:text-gray-700 text-sm"
+        >
+          Privacy Policy
+        </a>
+      </p>
     </div>
   );
 }
