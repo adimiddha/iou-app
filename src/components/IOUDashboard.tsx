@@ -3,6 +3,7 @@ import { supabase, type IOU, type Profile, type IOUType, type IOUStatus, type Fr
 import { Beer, Plus, Minus, LogOut, Users, Check, Clock, AlertCircle, X } from 'lucide-react';
 import QuantitySelector from './QuantitySelector';
 import NotificationBell from './NotificationBell';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 type IOUWithProfiles = IOU & {
   from_profile: Profile;
@@ -12,6 +13,7 @@ type IOUWithProfiles = IOU & {
 type IOUSummary = {
   userId: string;
   username: string;
+  avatar_url?: string | null;
   balances: Record<IOUType, number>;
   overallStatus: 'confirmed' | 'pending' | 'disputed';
 };
@@ -34,6 +36,7 @@ export default function IOUDashboard() {
   const [selectedUser, setSelectedUser] = useState('');
   const [description, setDescription] = useState<IOUType>('Coffee');
   const [amount, setAmount] = useState(1);
+  const [addIOUNote, setAddIOUNote] = useState('');
   const [direction, setDirection] = useState<'owe' | 'owed'>('owe');
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<'confirmed' | 'pending' | 'settled'>('confirmed');
@@ -172,7 +175,8 @@ export default function IOUDashboard() {
         description,
         amount,
         status: direction === 'owe' ? 'confirmed' as IOUStatus : 'pending' as IOUStatus,
-        requester_user_id: currentUser.id
+        requester_user_id: currentUser.id,
+        ...(addIOUNote.trim() && { optional_note: addIOUNote.trim() })
       };
 
       const { error } = await supabase.from('ious').insert([iouData]);
@@ -195,6 +199,7 @@ export default function IOUDashboard() {
         setSelectedUser('');
         setDescription('Coffee');
         setAmount(1);
+        setAddIOUNote('');
       }
     } catch (err) {
       console.error('Error adding IOU:', err);
@@ -384,11 +389,19 @@ export default function IOUDashboard() {
 
       const newBalance = currentBalance - generousIncreaseAmount;
 
+      const withNote = confirmedIOUs.filter((iou) => iou.optional_note?.trim());
+      const latestExistingNote = withNote.length
+        ? [...withNote].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0].optional_note?.trim()
+        : undefined;
+      const noteToSave = generousIncreaseNote.trim() || latestExistingNote;
+
       const { error: deleteError } = await supabase.from('ious').delete().or(
         `and(from_user_id.eq.${currentUser.id},to_user_id.eq.${friendId},description.eq.${type},status.eq.confirmed),and(from_user_id.eq.${friendId},to_user_id.eq.${currentUser.id},description.eq.${type},status.eq.confirmed)`
       );
 
       if (deleteError) throw deleteError;
+
+      const optionalNotePayload = noteToSave ? { optional_note: noteToSave } : {};
 
       if (newBalance > 0) {
         const { error: insertError } = await supabase.from('ious').insert([{
@@ -396,7 +409,8 @@ export default function IOUDashboard() {
           to_user_id: currentUser.id,
           description: type,
           amount: newBalance,
-          status: 'confirmed'
+          status: 'confirmed',
+          ...optionalNotePayload
         }]);
 
         if (insertError) throw insertError;
@@ -406,7 +420,8 @@ export default function IOUDashboard() {
           to_user_id: friendId,
           description: type,
           amount: Math.abs(newBalance),
-          status: 'confirmed'
+          status: 'confirmed',
+          ...optionalNotePayload
         }]);
 
         if (insertError) throw insertError;
@@ -634,6 +649,7 @@ export default function IOUDashboard() {
           const existing = summaryMap.get(iou.to_user_id) || {
             userId: iou.to_user_id,
             username: iou.to_profile.username,
+            avatar_url: iou.to_profile.avatar_url,
             balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
             overallStatus: 'confirmed' as const
           };
@@ -643,6 +659,7 @@ export default function IOUDashboard() {
           const existing = summaryMap.get(iou.from_user_id) || {
             userId: iou.from_user_id,
             username: iou.from_profile.username,
+            avatar_url: iou.from_profile.avatar_url,
             balances: { Coffee: 0, Beer: 0, Meal: 0, Walk: 0, Ride: 0, Pizza: 0 },
             overallStatus: 'confirmed' as const
           };
@@ -703,6 +720,23 @@ export default function IOUDashboard() {
     });
 
     return Array.from(friendsMap.values());
+  };
+
+  const getLatestNoteForSummary = (friendId: string, type: IOUType): string | undefined => {
+    if (!currentUser) return undefined;
+    const relevant = ious.filter(
+      (iou) =>
+        iou.status === 'confirmed' &&
+        iou.description === type &&
+        ((iou.from_user_id === currentUser.id && iou.to_user_id === friendId) ||
+          (iou.from_user_id === friendId && iou.to_user_id === currentUser.id)) &&
+        iou.optional_note?.trim()
+    );
+    if (relevant.length === 0) return undefined;
+    const sorted = [...relevant].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+    return sorted[0].optional_note?.trim() || undefined;
   };
 
   const summary = calculateSummary();
@@ -820,15 +854,23 @@ export default function IOUDashboard() {
                           return (
                             <div key={iou.id} className="bg-blue-50 border-l-4 border-blue-400 rounded-lg p-3 mb-2">
                               <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <div className="font-medium text-gray-800">{otherUser.username}</div>
-                                  <div className="text-sm text-gray-600 flex items-center gap-1">
-                                    <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
-                                    <span>{isPayer ? 'You owe' : 'Owes you'}: {iou.amount} × {iou.description}</span>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Avatar className="size-9 shrink-0">
+                                    {otherUser.avatar_url && <AvatarImage src={otherUser.avatar_url} alt={otherUser.username} />}
+                                    <AvatarFallback className="bg-blue-100 text-blue-700 text-sm font-medium">
+                                      {otherUser.username.slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-gray-800">{otherUser.username}</div>
+                                    <div className="text-sm text-gray-600 flex items-center gap-1">
+                                      <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
+                                      <span>{isPayer ? 'You owe' : 'Owes you'}: {iou.amount} × {iou.description}</span>
+                                    </div>
+                                    {iou.optional_note && (
+                                      <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
+                                    )}
                                   </div>
-                                  {iou.optional_note && (
-                                    <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
-                                  )}
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded ${
                                   isRequester ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
@@ -887,17 +929,25 @@ export default function IOUDashboard() {
                           return (
                             <div key={iou.id} className="bg-amber-50 border-l-4 border-amber-400 rounded-lg p-3 mb-2">
                               <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <div className="font-medium text-gray-800">{otherUser.username}</div>
-                                  <div className="text-sm text-gray-600 flex items-center gap-1">
-                                    <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
-                                    <span>-{iou.amount} × {iou.description}</span>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Avatar className="size-9 shrink-0">
+                                    {otherUser.avatar_url && <AvatarImage src={otherUser.avatar_url} alt={otherUser.username} />}
+                                    <AvatarFallback className="bg-amber-100 text-amber-700 text-sm font-medium">
+                                      {otherUser.username.slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-gray-800">{otherUser.username}</div>
+                                    <div className="text-sm text-gray-600 flex items-center gap-1">
+                                      <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
+                                      <span>-{iou.amount} × {iou.description}</span>
+                                    </div>
+                                    {iou.optional_note && (
+                                      <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
+                                    )}
                                   </div>
-                                  {iou.optional_note && (
-                                    <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
-                                  )}
                                 </div>
-                                <span className={`text-xs px-2 py-1 rounded ${
+                                <span className={`text-xs px-2 py-1 rounded shrink-0 ${
                                   isRequester ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'
                                 }`}>
                                   {isRequester ? 'Sent' : 'Review'}
@@ -954,17 +1004,25 @@ export default function IOUDashboard() {
                           return (
                             <div key={iou.id} className="bg-red-50 border-l-4 border-red-400 rounded-lg p-3 mb-2">
                               <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <div className="font-medium text-gray-800">{otherUser.username}</div>
-                                  <div className="text-sm text-gray-600 flex items-center gap-1">
-                                    <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
-                                    <span>-{iou.amount} × {iou.description}</span>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Avatar className="size-9 shrink-0">
+                                    {otherUser.avatar_url && <AvatarImage src={otherUser.avatar_url} alt={otherUser.username} />}
+                                    <AvatarFallback className="bg-red-100 text-red-700 text-sm font-medium">
+                                      {otherUser.username.slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="min-w-0">
+                                    <div className="font-medium text-gray-800">{otherUser.username}</div>
+                                    <div className="text-sm text-gray-600 flex items-center gap-1">
+                                      <span className="text-lg">{IOU_EMOJIS[iou.description]}</span>
+                                      <span>-{iou.amount} × {iou.description}</span>
+                                    </div>
+                                    {iou.optional_note && (
+                                      <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
+                                    )}
                                   </div>
-                                  {iou.optional_note && (
-                                    <div className="text-xs text-gray-500 mt-1 italic">"{iou.optional_note}"</div>
-                                  )}
                                 </div>
-                                <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700">
+                                <span className="text-xs px-2 py-1 rounded shrink-0 bg-red-100 text-red-700">
                                   Disputed
                                 </span>
                               </div>
@@ -987,13 +1045,22 @@ export default function IOUDashboard() {
                       .map((s) => (
                       <div key={s.userId} className="bg-white rounded-lg p-4 shadow-sm border-l-4 border-l-orange-500">
                         <div className="flex justify-between items-center mb-3">
-                          <div className="font-semibold text-gray-800">{s.username}</div>
+                          <div className="flex items-center gap-2">
+                            <Avatar className="size-9">
+                              {s.avatar_url && <AvatarImage src={s.avatar_url} alt={s.username} />}
+                              <AvatarFallback className="bg-orange-100 text-orange-700 text-sm font-medium">
+                                {s.username.slice(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="font-semibold text-gray-800">{s.username}</span>
+                          </div>
                         </div>
                         <div className="space-y-2">
                           {(Object.entries(s.balances) as [IOUType, number][])
                             .filter(([_, amount]) => amount !== 0)
                             .map(([type, amount]) => {
                               const isOwed = amount > 0;
+                              const latestNote = getLatestNoteForSummary(s.userId, type);
                               return (
                                 <div
                                   key={type}
@@ -1015,6 +1082,11 @@ export default function IOUDashboard() {
                                       {isOwed ? amount : -Math.abs(amount)}
                                     </span>
                                   </div>
+                                  {latestNote && (
+                                    <div className="text-xs text-gray-500 px-2 pb-1 italic">
+                                      "{latestNote}"
+                                    </div>
+                                  )}
                                   <div className="border-t border-gray-200 px-2 py-1.5 flex gap-2 bg-white bg-opacity-50">
                                     {isOwed ? (
                                       <>
@@ -1143,6 +1215,19 @@ export default function IOUDashboard() {
                       onChange={setAmount}
                       min={1}
                       max={10}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Optional Note
+                    </label>
+                    <input
+                      type="text"
+                      value={addIOUNote}
+                      onChange={(e) => setAddIOUNote(e.target.value)}
+                      placeholder="e.g., For the dinner last night"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
 
