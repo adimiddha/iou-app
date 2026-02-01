@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase, type Friendship, type Profile } from '../lib/supabase';
-import { UserPlus, Check, X, Users, MoreVertical } from 'lucide-react';
+import { hashPhoneNumber, validatePhoneNumber } from '../lib/phone-utils';
+import PhoneInput from './PhoneInput';
+import { UserPlus, Check, X, Users, MoreVertical, Phone } from 'lucide-react';
 
 type FriendshipWithProfile = Friendship & {
   requester_profile?: Profile;
@@ -12,7 +14,10 @@ export default function FriendRequests() {
   const [friends, setFriends] = useState<FriendshipWithProfile[]>([]);
   const [pendingRequests, setPendingRequests] = useState<FriendshipWithProfile[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendshipWithProfile[]>([]);
+  const [searchMode, setSearchMode] = useState<'username' | 'phone'>('username');
   const [searchUsername, setSearchUsername] = useState('');
+  const [searchPhone, setSearchPhone] = useState('');
+  const [phoneSearchResult, setPhoneSearchResult] = useState<{ id: string; username: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -109,79 +114,111 @@ export default function FriendRequests() {
     setTimeout(() => setMessage(null), 3000);
   };
 
+  const sendRequestToUserId = async (targetUserId: string): Promise<boolean> => {
+    if (!currentUser || targetUserId === currentUser.id) return false;
+    const { data: existingFriendship } = await supabase
+      .from('friendships')
+      .select('*')
+      .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${targetUserId}),and(requester_id.eq.${targetUserId},addressee_id.eq.${currentUser.id})`)
+      .maybeSingle();
+    if (existingFriendship) {
+      if (existingFriendship.status === 'accepted') {
+        showMessage('error', 'You are already friends with this user');
+      } else if (existingFriendship.status === 'pending') {
+        if (existingFriendship.requester_id === currentUser.id) {
+          showMessage('error', 'Friend request already sent');
+        } else {
+          showMessage('error', 'This user has already sent you a friend request. Check your pending requests!');
+        }
+      }
+      return false;
+    }
+    const { error } = await supabase
+      .from('friendships')
+      .insert([{
+        requester_id: currentUser.id,
+        addressee_id: targetUserId,
+        status: 'pending'
+      }]);
+    if (error) {
+      if (error.code === '23505') {
+        showMessage('error', 'Friend request already exists');
+      } else {
+        showMessage('error', 'Failed to send friend request');
+      }
+      return false;
+    }
+    await createNotification(
+      targetUserId,
+      'friend_request',
+      'New Friend Request',
+      `${currentUser.username} sent you a friend request`,
+      currentUser.id
+    );
+    await loadFriendships();
+    showMessage('success', 'Friend request sent!');
+    return true;
+  };
+
   const handleSendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !searchUsername.trim()) return;
-
     setLoading(true);
     try {
       const { data: targetUser } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id')
         .eq('username', searchUsername.trim())
         .maybeSingle();
-
       if (!targetUser) {
         showMessage('error', 'User not found');
         setLoading(false);
         return;
       }
-
-      if (targetUser.id === currentUser.id) {
-        showMessage('error', 'You cannot add yourself as a friend');
-        setLoading(false);
-        return;
-      }
-
-      const { data: existingFriendship } = await supabase
-        .from('friendships')
-        .select('*')
-        .or(`and(requester_id.eq.${currentUser.id},addressee_id.eq.${targetUser.id}),and(requester_id.eq.${targetUser.id},addressee_id.eq.${currentUser.id})`)
-        .maybeSingle();
-
-      if (existingFriendship) {
-        if (existingFriendship.status === 'accepted') {
-          showMessage('error', 'You are already friends with this user');
-        } else if (existingFriendship.status === 'pending') {
-          if (existingFriendship.requester_id === currentUser.id) {
-            showMessage('error', 'Friend request already sent');
-          } else {
-            showMessage('error', 'This user has already sent you a friend request. Check your pending requests!');
-          }
-        }
-        setLoading(false);
-        return;
-      }
-
-      const { error } = await supabase
-        .from('friendships')
-        .insert([{
-          requester_id: currentUser.id,
-          addressee_id: targetUser.id,
-          status: 'pending'
-        }]);
-
-      if (error) {
-        if (error.code === '23505') {
-          showMessage('error', 'Friend request already exists');
-        } else {
-          showMessage('error', 'Failed to send friend request');
-        }
-      } else {
-        await createNotification(
-          targetUser.id,
-          'friend_request',
-          'New Friend Request',
-          `${currentUser.username} sent you a friend request`,
-          currentUser.id
-        );
-
-        await loadFriendships();
-        showMessage('success', 'Friend request sent!');
-        setSearchUsername('');
-      }
+      const ok = await sendRequestToUserId(targetUser.id);
+      if (ok) setSearchUsername('');
     } catch (err) {
       showMessage('error', 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePhoneSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchPhone.length !== 10) return;
+    if (!validatePhoneNumber(searchPhone)) {
+      showMessage('error', 'Enter a valid 10-digit number.');
+      return;
+    }
+    setLoading(true);
+    setPhoneSearchResult(null);
+    try {
+      const hash = await hashPhoneNumber(searchPhone);
+      const { data, error } = await supabase.rpc('search_by_phone_hash', { phone_hash_input: hash });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row?.id && row?.username) {
+        setPhoneSearchResult({ id: row.id, username: row.username });
+      } else {
+        showMessage('error', 'No user found with that number.');
+      }
+    } catch (err) {
+      showMessage('error', 'Search failed. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendRequestByPhone = async () => {
+    if (!currentUser || !phoneSearchResult) return;
+    setLoading(true);
+    try {
+      const ok = await sendRequestToUserId(phoneSearchResult.id);
+      if (ok) {
+        setPhoneSearchResult(null);
+        setSearchPhone('');
+      }
     } finally {
       setLoading(false);
     }
@@ -249,22 +286,86 @@ export default function FriendRequests() {
           <UserPlus className="w-5 h-5" />
           Add Friend
         </h2>
-        <form onSubmit={handleSendRequest} className="flex gap-2">
-          <input
-            type="text"
-            value={searchUsername}
-            onChange={(e) => setSearchUsername(e.target.value)}
-            placeholder="Enter username..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
+        <div className="flex gap-2 mb-4">
           <button
-            type="submit"
-            disabled={loading}
-            className="bg-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+            type="button"
+            onClick={() => { setSearchMode('username'); setPhoneSearchResult(null); }}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              searchMode === 'username'
+                ? 'bg-purple-600 text-white'
+                : 'bg-white/80 text-gray-700 hover:bg-white'
+            }`}
           >
-            {loading ? 'Sending...' : 'Send Request'}
+            By username
           </button>
-        </form>
+          <button
+            type="button"
+            onClick={() => { setSearchMode('phone'); setPhoneSearchResult(null); }}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-1 ${
+              searchMode === 'phone'
+                ? 'bg-purple-600 text-white'
+                : 'bg-white/80 text-gray-700 hover:bg-white'
+            }`}
+          >
+            <Phone className="w-4 h-4" />
+            By phone number
+          </button>
+        </div>
+
+        {searchMode === 'username' && (
+          <form onSubmit={handleSendRequest} className="flex gap-2">
+            <input
+              type="text"
+              value={searchUsername}
+              onChange={(e) => setSearchUsername(e.target.value)}
+              placeholder="Enter username..."
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Sending...' : 'Send Request'}
+            </button>
+          </form>
+        )}
+
+        {searchMode === 'phone' && (
+          <>
+            <p className="text-sm text-gray-600 mb-3">
+              We never upload or store your contacts. Add your number in Profile so friends can find you.
+            </p>
+            <form onSubmit={handlePhoneSearch} className="flex gap-2">
+              <PhoneInput
+                value={searchPhone}
+                onChange={setSearchPhone}
+                placeholder="(xxx) xxx-xxxx"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Searching...' : 'Search'}
+              </button>
+            </form>
+            {phoneSearchResult && (
+              <div className="mt-4 p-4 bg-white rounded-lg border border-purple-200 flex justify-between items-center">
+                <span className="font-medium text-gray-800">{phoneSearchResult.username}</span>
+                <button
+                  type="button"
+                  onClick={handleSendRequestByPhone}
+                  disabled={loading}
+                  className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {loading ? 'Sending...' : 'Send Request'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {pendingRequests.length > 0 && (

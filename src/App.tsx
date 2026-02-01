@@ -1,70 +1,40 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
+import { hashPhoneNumber, normalizePhoneNumber, validatePhoneNumber } from './lib/phone-utils';
 import AuthForm from './components/AuthForm';
 import IOUDashboard from './components/IOUDashboard';
 import FriendRequests from './components/FriendRequests';
+import Profile from './components/Profile';
 
 function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<'ious' | 'friends'>('ious');
+  const [activeView, setActiveView] = useState<'ious' | 'friends' | 'profile'>('ious');
   const [needsUsername, setNeedsUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
   const [usernameError, setUsernameError] = useState('');
   const [submittingUsername, setSubmittingUsername] = useState(false);
 
   useEffect(() => {
-    console.log('App mounted, checking initial session...');
-
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      console.log('Initial session check:', { session: session?.user?.email, error });
-
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
-        console.log('Session found, checking profile for user:', session.user.id);
         const hasProfile = await checkUserProfile(session.user.id);
-        console.log('Profile check result:', hasProfile);
-
-        if (!hasProfile) {
-          console.log('No profile found, prompting for username');
-          setNeedsUsername(true);
-        } else {
-          console.log('Profile exists, allowing access to app');
-          setNeedsUsername(false);
-        }
-      } else {
-        console.log('No session found');
+        setNeedsUsername(!hasProfile);
       }
-
       setSession(session);
       setLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       (async () => {
-        console.log('========================================');
-        console.log('Auth state change event:', event);
-        console.log('Session:', session?.user?.email);
-        console.log('========================================');
-
         if (session) {
-          console.log('Session detected in state change, checking profile...');
           const hasProfile = await checkUserProfile(session.user.id);
-          console.log('Profile exists:', hasProfile);
-
-          if (!hasProfile) {
-            console.log('Setting needsUsername to true');
-            setNeedsUsername(true);
-          } else {
-            console.log('Setting needsUsername to false');
-            setNeedsUsername(false);
-          }
+          setNeedsUsername(!hasProfile);
         } else {
-          console.log('No session in state change');
           setNeedsUsername(false);
         }
-
         setSession(session);
         setLoading(false);
       })();
@@ -74,20 +44,23 @@ function App() {
   }, []);
 
   const checkUserProfile = async (userId: string) => {
-    console.log('Checking profile for user:', userId);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('profiles')
       .select('id')
       .eq('id', userId)
       .maybeSingle();
-
-    console.log('Profile query result:', { data, error });
     return !!data;
   };
 
   const handleAuthSuccess = () => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    setLoading(true);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session) {
+        const hasProfile = await checkUserProfile(session.user.id);
+        setNeedsUsername(!hasProfile);
+      }
       setSession(session);
+      setLoading(false);
     });
   };
 
@@ -99,19 +72,32 @@ function App() {
     setSubmittingUsername(true);
 
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .insert([{ id: session.user.id, username: usernameInput }]);
+      const payload: { id: string; username: string; phone_hash?: string; phone_normalized?: string } = {
+        id: session.user.id,
+        username: usernameInput.trim(),
+      };
+      const storedPhone = sessionStorage.getItem('iou_signup_phone');
+      if (storedPhone && storedPhone.length === 10 && validatePhoneNumber(storedPhone)) {
+        payload.phone_hash = await hashPhoneNumber(storedPhone);
+        payload.phone_normalized = normalizePhoneNumber(storedPhone);
+      }
+
+      const { error } = await supabase.from('profiles').insert([payload]);
 
       if (error) {
         if (error.code === '23505') {
-          setUsernameError('Username already taken. Please choose another.');
+          if (error.message?.includes('phone_hash')) {
+            setUsernameError('This number is already linked to another account.');
+          } else {
+            setUsernameError('Username already taken. Please choose another.');
+          }
         } else {
           setUsernameError(error.message);
         }
         return;
       }
 
+      sessionStorage.removeItem('iou_signup_phone');
       setNeedsUsername(false);
       setUsernameInput('');
     } catch (err: any) {
@@ -145,7 +131,7 @@ function App() {
             Choose a Username
           </h2>
           <p className="text-gray-600 mb-6 text-center">
-            Please select a username to complete your profile
+            This is mainly how other users will find you.
           </p>
           <form onSubmit={handleUsernameSubmit} className="space-y-4">
             <div>
@@ -211,9 +197,21 @@ function App() {
           >
             Friends
           </button>
+          <button
+            onClick={() => setActiveView('profile')}
+            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+              activeView === 'profile'
+                ? 'bg-white text-gray-800 shadow-md'
+                : 'bg-white/50 text-gray-600 hover:bg-white/70'
+            }`}
+          >
+            Profile
+          </button>
         </div>
 
-        {activeView === 'ious' ? <IOUDashboard /> : <FriendRequests />}
+        {activeView === 'ious' && <IOUDashboard />}
+        {activeView === 'friends' && <FriendRequests />}
+        {activeView === 'profile' && <Profile />}
       </div>
     </div>
   );

@@ -14,6 +14,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export type Profile = {
   id: string;
   username: string;
+  avatar_url?: string | null;
+  phone_hash?: string | null;
+  phone_normalized?: string | null;
+  phone_search_enabled?: boolean | null;
   created_at: string;
 };
 
