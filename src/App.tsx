@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './lib/supabase';
 import { hashPhoneNumber, normalizePhoneNumber, validatePhoneNumber } from './lib/phone-utils';
 import AuthForm from './components/AuthForm';
+import Landing from './components/Landing';
 import IOUDashboard from './components/IOUDashboard';
 import FriendRequests from './components/FriendRequests';
 import Profile from './components/Profile';
@@ -9,6 +10,7 @@ import Profile from './components/Profile';
 function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showAuthForm, setShowAuthForm] = useState(false);
   const [activeView, setActiveView] = useState<'ious' | 'friends' | 'profile'>('ious');
   const [needsUsername, setNeedsUsername] = useState(false);
   const [usernameInput, setUsernameInput] = useState('');
@@ -116,9 +118,15 @@ function App() {
   }
 
   if (!session) {
+    if (!showAuthForm) {
+      return <Landing onSignInClick={() => setShowAuthForm(true)} />;
+    }
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center p-4">
-        <AuthForm onAuthSuccess={handleAuthSuccess} />
+        <AuthForm
+          onAuthSuccess={handleAuthSuccess}
+          onBackToLanding={() => setShowAuthForm(false)}
+        />
       </div>
     );
   }

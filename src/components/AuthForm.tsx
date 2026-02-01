@@ -6,9 +6,10 @@ import { Check, X, Eye, EyeOff } from 'lucide-react';
 
 type AuthFormProps = {
   onAuthSuccess: () => void;
+  onBackToLanding?: () => void;
 };
 
-export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
+export default function AuthForm({ onAuthSuccess, onBackToLanding }: AuthFormProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -137,6 +138,17 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
 
   return (
     <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
+      {onBackToLanding && (
+        <p className="mb-4">
+          <button
+            type="button"
+            onClick={onBackToLanding}
+            className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+          >
+            ← Back
+          </button>
+        </p>
+      )}
       <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">
         {isSignUp ? 'Sign Up' : 'Sign In'}
       </h2>
