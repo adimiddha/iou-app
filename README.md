@@ -2,6 +2,8 @@
 
 An app for turning IOUs into excuses to hang out — log a coffee owed, get a reason to meet up.
 
+Try it here: [IOU Web App](iou-app.vercel.app)
+
 ---
 
 ## The Problem
