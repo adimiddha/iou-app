@@ -2,6 +2,8 @@
 
 A social IOU tracker for casual debts between friends — beers owed, coffees borrowed, meals shared.
 
+Try it here: iou-app.vercel.app
+
 ---
 
 ## The Problem
